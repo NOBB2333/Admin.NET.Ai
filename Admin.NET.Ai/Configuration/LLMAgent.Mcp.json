@@ -1,0 +1,48 @@
+{
+    "LLM-Mcp": {
+        "Servers": [
+            {
+                "Enable": false,
+                "mcpServers": {
+                    "amap-amap-sse": {
+                        "type": "sse",
+                        "name": "高德地图",
+                        "description": "高德地图",
+                        "ApiKey": "0ecb18844e",
+                        "BaseUrl": "https://mcp.amap.com/sse?key=您在高德官网上申请的key"
+                    }
+                }
+            },
+            {
+                "Enable": false,
+                "mcpServers": {
+                    "WanImage": {
+                        "type": "sse",
+                        "description": "阿里云百炼官方图像生成 MCP 服务，基于通义万相系列图像生成模型封装，包括文生图、图像编辑、风格迁移等工具，按模型调用量计费。",
+                        "isActive": true,
+                        "name": "阿里云百炼_通义万相-图像生成",
+                        "baseUrl": "https://dashscope.aliyuncs.com/api/v1/mcps/WanImage/sse",
+                        "headers": {
+                            "Authorization": "Bearer sk-8242f37"
+                        }
+                    }
+                }
+            },
+            {
+                "Enable": false,
+                "mcpServers": {
+                    "stockstar": {
+                        "type": "sse",
+                        "description": "证券之星 MCP 服务是面向金融投资领域的智能工具，将证券之星各项数据与服务封装为云端服务。该服务目前支持A股、港股等各项基础数据、衍生数据、财务分析、商业模式分析等。",
+                        "isActive": true,
+                        "name": "阿里云百炼_证券之星",
+                        "baseUrl": "https://dashscope.aliyuncs.com/api/v1/mcps/stockstar/sse",
+                        "headers": {
+                            "Authorization": "Bearer sk-82437"
+                        }
+                    }
+                }
+            }
+        ]
+    }
+}

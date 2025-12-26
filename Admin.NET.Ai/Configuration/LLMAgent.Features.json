@@ -1,0 +1,114 @@
+{
+    // 这个文件是做什么的，忘记了，先放着吧，等会儿再看。
+    "LLM-AgentWorkflow": {
+        "Enabled": true,
+        "WorkflowPath": "./workflows",
+        "MaxSteps": 50,
+        "TimeoutSeconds": 300,
+        "EnableParallelExecution": false,
+        "MaxParallelTasks": 3,
+        "Toolchain": {
+            "AvailableTools": [
+                "web_search",
+                "code_executor",
+                "file_reader",
+                "database_query"
+            ],
+            "ToolConfigs": {
+                "web_search": {
+                    "max_results": 10,
+                    "timeout": 30
+                },
+                "code_executor": {
+                    "timeout": 60,
+                    "sandbox": true
+                }
+            },
+            "EnableAutoDiscovery": true
+        }
+    },
+    "LLM-Document": {
+        "Parser": {
+            "SupportedFormats": [
+                "pdf",
+                "docx",
+                "txt",
+                "md",
+                "html",
+                "xlsx",
+                "pptx"
+            ],
+            "MaxFileSizeMB": 100,
+            "EnableOcr": false,
+            "OcrProvider": "Tesseract",
+            "OcrConfig": {
+                "language": "chi_sim+eng",
+                "psm": 6
+            }
+        },
+        "Preprocess": {
+            "EnableTextCleaning": true,
+            "EnableDeduplication": true,
+            "EnableLanguageDetection": true,
+            "EnableSensitiveInfoFilter": false
+        },
+        "Storage": {
+            "Type": "Local",
+            "Path": "./documents",
+            "EnableVersionControl": true,
+            "Config": {
+                "compression": true,
+                "encryption": false
+            }
+        }
+    },
+    "LLM-CostControl": {
+        "Enabled": true,
+        "DailyBudget": 1000,
+        "MonthlyBudget": 30000,
+        "RateLimiting": {
+            "MaxRequestsPerMinute": 60,
+            "MaxTokensPerDay": 10000000
+        },
+        "OverBudgetApproval": {
+            "Enabled": true,
+            "MaxApprovalAmount": 500,
+            "ApprovalExpiryHours": 24,
+            "RequireApproval": true
+        },
+        "Alerts": {
+            "Enabled": true,
+            "Threshold": 0.8,
+            "Email": "admin@example.com"
+        },
+        "CostTracking": {
+            "Enabled": true,
+            "Storage": "Database",
+            "RetentionDays": 90
+        }
+    },
+    "LLM-Capabilities": {
+        "FunctionCalling": {
+            "Enabled": true,
+            "SafetyGuard": {
+                "Provider": "AzureOpenAI",
+                "Model": "gpt-5-mini-moderation"
+            }
+        },
+        "Vision": {
+            "Provider": "GPT4",
+            "Model": "gpt-4o-mini",
+            "MaxImageSizeMB": 5
+        },
+        "Caching": {
+            "Provider": "Redis",
+            "ConnectionString": "localhost:6379",
+            "DefaultTtlSeconds": 600
+        },
+        "Telemetry": {
+            "Enabled": true,
+            "Sink": "OpenTelemetry",
+            "Endpoint": "http://localhost:4318"
+        }
+    }
+}

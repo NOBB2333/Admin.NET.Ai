@@ -1,0 +1,58 @@
+{
+    "LLM-Rag": {
+        "VectorDatabase": {
+            "Type": "Chroma",
+            "ConnectionString": "http://localhost:8000",
+            "CollectionName": "knowledge_base"
+        },
+        "Embedding": {
+            "Provider": "AliyunBailian",
+            "Model": "text-embedding-v1",
+            "Dimension": 1536
+        },
+        "Rerank": {
+            "Provider": "SiliconFlow",
+            "Model": "bge-reranker-v2",
+            "TopK": 3,
+            "ScoreThreshold": 0.2
+        },
+        "Retrieval": {
+            "TopK": 5,
+            "SimilarityThreshold": 0.7,
+            "ChunkSize": 1000,
+            "ChunkOverlap": 200
+        }
+    },
+    "LLM-GraphRag": {
+        "GraphDatabase": {
+            "Type": "Neo4j",
+            "ConnectionString": "bolt://localhost:7687",
+            "Username": "neo4j",
+            "Password": "neo4j-password"
+        },
+        "Schema": {
+            "NodeTypes": [
+                "Entity",
+                "Concept",
+                "Event"
+            ],
+            "RelationTypes": [
+                "RELATED_TO",
+                "PART_OF",
+                "OCCURRED_AT"
+            ]
+        },
+        "Ingestion": {
+            "LLMProvider": "DeepSeek",
+            "PromptTemplate": "graph-ingestion",
+            "BatchSize": 50,
+            "MaxConcurrency": 4
+        },
+        "Query": {
+            "MaxDepth": 3,
+            "ExpandRelations": true,
+            "HybridFusion": true,
+            "AnswerSynthesisModel": "qwen-plus"
+        }
+    }
+}

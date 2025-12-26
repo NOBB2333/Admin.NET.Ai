@@ -1,0 +1,29 @@
+# .NET Core
+bin/
+obj/
+
+# Visual Studio / Visual Studio Code
+.vs/
+.vscode/
+*.user
+*.suo
+*.sln.docstates
+
+# OS generated files
+.DS_Store
+/.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# User specific files
+*.user
+*.userosscache
+*.sln.docstates
+
+# Build results
+[Tt]emp/
+[Ll]og/·

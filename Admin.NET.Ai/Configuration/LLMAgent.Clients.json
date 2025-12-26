@@ -1,0 +1,147 @@
+{
+    "LLM-Clients": {
+        "DefaultProvider": "qwen3-vl-plus",
+        "Clients": {
+            "DeepSeek": {
+                "ApiKey": "sk-3187c4f77ef955be592",
+                "ModelId": "deepseek-chat",
+                "BaseUrl": "https://api.deepseek.com/v1",
+                "TimeoutSeconds": 60,
+                "MaxRetryCount": 2,
+                "EnableStreaming": true,
+                "InPrice": 2,
+                "OutPrice": 3
+            },
+            "SiliconFlow": {
+                "ApiKey": "sk-wiseqqmrctbjjis",
+                "ModelId": "Qwen/QwQ-32B",
+                "BaseUrl": "https://api.siliconflow.cn/v1/",
+                "TimeoutSeconds": 60,
+                "MaxRetryCount": 2,
+                "EnableStreaming": true,
+                "InPrice": 4,
+                "OutPrice": 4
+            },
+            "AliBaiLian-qwen3-max": {
+                "ApiKey": "sk-8248ea22f37",
+                "ModelId": "qwen3-max",
+                "BaseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                "TimeoutSeconds": 60,
+                "MaxRetryCount": 2,
+                "EnableStreaming": true,
+                "InPrice": 4,
+                "OutPrice": 24
+            },
+            "qwen3-vl-plus": {
+                "ApiKey": "sk-8248eaeb2022f37",
+                "ModelId": "qwen3-vl-plus",
+                "BaseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                "TimeoutSeconds": 60,
+                "MaxRetryCount": 2,
+                "EnableStreaming": true,
+                "InPrice": 4,
+                "OutPrice": 24
+            },
+            "AliBaiLian-qwen-flash": {
+                "ApiKey": "sk-8248eaf37",
+                "ModelId": "qwen-flash",
+                "BaseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                "TimeoutSeconds": 60,
+                "MaxRetryCount": 2,
+                "EnableStreaming": true,
+                "InPrice": 0.15,
+                "OutPrice": 1.5
+            },
+            "AliBaiLian-qwen-plus": {
+                "ApiKey": "sk-8248e2f37",
+                "ModelId": "qwen-plus",
+                "BaseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                "TimeoutSeconds": 60,
+                "MaxRetryCount": 2,
+                "EnableStreaming": true,
+                "InPrice": 0.8,
+                "OutPrice": 2
+            },
+            "AliBaiLian-qwen-plus-latest": {
+                "ApiKey": "sk-8248e22f37",
+                "ModelId": "qwen-plus-latest",
+                "BaseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                "TimeoutSeconds": 60,
+                "MaxRetryCount": 2,
+                "EnableStreaming": true,
+                "InPrice": 4,
+                "OutPrice": 24
+            },
+            "AliBaiLian-deepseek-v3.2-exp": {
+                "ApiKey": "sk-8248eaefbf6640bb9182c2f5b2022f37",
+                "ModelId": "deepseek-v3.2-exp",
+                "BaseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                "TimeoutSeconds": 60,
+                "MaxRetryCount": 2,
+                "EnableStreaming": true,
+                "InPrice": 4,
+                "OutPrice": 24
+            },
+            "Gemini": {
+                "ApiKey": "AIzaSy-9g",
+                "ModelId": "deepseek-chat",
+                "BaseUrl": "https://api.deepseek.com/v1",
+                "TimeoutSeconds": 60,
+                "MaxRetryCount": 2,
+                "EnableStreaming": true,
+                "InPrice": 2,
+                "OutPrice": 3
+            },
+            "Grok": {
+                "ApiKey": "xai-yRZ4Ht03B7Ceg",
+                "ModelId": "deepseek-chat",
+                "BaseUrl": "https://api.deepseek.com/v1",
+                "TimeoutSeconds": 60,
+                "MaxRetryCount": 2,
+                "EnableStreaming": true,
+                "InPrice": 2,
+                "OutPrice": 3
+            },
+            "GPT4": {
+                "ApiKey": "sk-LYX8eo8vRBazajx",
+                "ModelId": "gpt-4-turbo",
+                "BaseUrl": "https://api.openai.com/v1",
+                "TimeoutSeconds": 120,
+                "MaxRetryCount": 3,
+                "EnableStreaming": true
+            },
+            "AzureOpenAI": {
+                "ApiKey": "your-azure-openai-key",
+                "ModelId": "gpt-4",
+                "BaseUrl": "https://your-resource.openai.azure.com/",
+                "TimeoutSeconds": 120,
+                "MaxRetryCount": 3,
+                "EnableStreaming": true
+            },
+            "Researcher": {
+                "ApiKey": "sk-318592",
+                "ModelId": "deepseek-chat",
+                "BaseUrl": "https://api.deepseek.com/v1",
+                "TimeoutSeconds": 60,
+                "MaxRetryCount": 2,
+                "EnableStreaming": true
+            },
+            "Writer": {
+                "ApiKey": "sk-318755be592",
+                "ModelId": "deepseek-chat",
+                "BaseUrl": "https://api.deepseek.com/v1",
+                "TimeoutSeconds": 60,
+                "MaxRetryCount": 2,
+                "EnableStreaming": true
+            },
+            "Reviewer": {
+                "ApiKey": "sk-3187cbe592",
+                "ModelId": "deepseek-chat",
+                "BaseUrl": "https://api.deepseek.com/v1",
+                "TimeoutSeconds": 60,
+                "MaxRetryCount": 2,
+                "EnableStreaming": true
+            }
+        }
+    }
+}

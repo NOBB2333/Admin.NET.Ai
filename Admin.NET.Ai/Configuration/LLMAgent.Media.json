@@ -1,0 +1,192 @@
+{
+    // 坏了 这里百炼的东西 "怎么沉浸在自己的艺术里了" 只有API 没有 sdk 我不知道怎么做了
+    // 不对啊。tts 不是复制声音么 这里2部分 一部分复制 一部分生成
+    "LLM-Tts": {
+        "DefaultProvider": "AliyunBailian-qwen3-tts-flash",
+        "Providers": {
+            "AliyunBailian-qwen3-tts-flash": {
+                "ApiKey": "sk-8242f37",
+                "Model": "qwen3-tts-flash",
+                "Voice": "Cherry", // 更多选择见doc
+                "language_type": "Chinese",
+                "Stream": true, // 流式输出就是 base64 持续返回可，并在最后一个数据包中包含完整音频的 URL。
+                "Style": "general",
+                "SampleRate": 24000,
+                "InPrice": 0,
+                "OutPrice": 0.00022, //元/每秒
+                "Doc": "https://bailian.console.aliyun.com/?spm=5176.29619931.J_PvCec88exbQTi-U433Fxg.5.74cd10d7YoRPtI&tab=doc#/doc/?type=model&url=2879134"
+            },
+            "AliyunBailian-qwen3-tts": {
+                "ApiKey": "sk-8248ea",
+                "Model": "qwen3-tts-flash",
+                "Voice": "Cherry", // 更多选择见doc
+                "language_type": "Chinese",
+                "Stream": true, // 流式输出就是 base64 持续返回可，并在最后一个数据包中包含完整音频的 URL。
+                "Style": "general",
+                "SampleRate": 24000,
+                "InPrice": 0,
+                "OutPrice": 0.00022, //元/每秒
+                "Doc": "https://bailian.console.aliyun.com/?spm=5176.29619931.J_PvCec88exbQTi-U433Fxg.5.74cd10d7YoRPtI&tab=doc#/doc/?type=model&url=2879134"
+            },
+            // 这个是复制声音。输出11国语言  好像不适合这里哦 等他发展发展在看  感觉不对劲 怎么只有http 没有包呢
+            "AliyunBailian-qwen-voice-enrollment": {
+                "ApiKey": "sk-8248ea",
+                "Model": "qwen-voice-enrollment",
+                "Stream": true, // 流式输出就是 base64 持续返回可，并在最后一个数据包中包含完整音频的 URL。
+                "Style": "general",
+                "SampleRate": 24000,
+                "InPrice": 0,
+                "OutPrice": 0.00022, //元/每秒
+                "Doc": "https://bailian.console.aliyun.com/?spm=5176.29619931.J_PvCec88exbQTi-U433Fxg.5.74cd10d7YoRPtI&tab=model#/model-market/detail/qwen-voice-enrollment"
+            }
+        }
+        // 更多详见百炼官网
+    },
+    // 语音识别 
+    "LLM-Asr": {
+        "DefaultProvider": "AliyunBailian",
+        "Providers": {
+            "AliyunBailian-fun-asr": {
+                "ApiKey": "sk-8248ea",
+                "Model": "fun-asr",
+                "BaseUrl": "https://dashscope.aliyuncs.com/api/v1/services/audio/asr",
+                "SupportedLanguages": [
+                    "zh-CN",
+                    "en-US"
+                    // 等等31国语言
+                ],
+                "SampleRate": 16000,
+                "EnableRealtime": true,
+                "EnablePunctuation": true,
+                "EnableSpeakerDiarization": false
+            },
+            "AliyunBailian-qwen3-asr-flash-filetrans": {
+                "ApiKey": "sk-8248ea",
+                "Model": "qwen3-asr-flash-filetrans",
+                "BaseUrl": "https://dashscope.aliyuncs.com/api/v1/services/audio/asr",
+                "SupportedLanguages": [
+                    "zh-CN",
+                    "en-US"
+                    // 等等31国语言
+                ],
+                "SampleRate": 16000,
+                "EnableRealtime": true,
+                "EnablePunctuation": true,
+                "EnableSpeakerDiarization": false
+            },
+            "AzureOpenAI": {
+                "ApiKey": "your-azure-key",
+                "Model": "whisper-1",
+                "BaseUrl": "https://your-resource.openai.azure.com/",
+                "SupportedLanguages": [
+                    "en-US",
+                    "zh-CN",
+                    "ja-JP"
+                ],
+                "SampleRate": 16000,
+                "EnableRealtime": false,
+                "EnablePunctuation": true,
+                "EnableSpeakerDiarization": false
+            }
+        },
+        "Cache": {
+            "Enabled": true,
+            "Path": "./asr-cache",
+            "ExpiryHours": 24
+        }
+    },
+    "LLM-ImageGen": {
+        "DefaultProvider": "OpenAI",
+        "Providers": {
+            "OpenAI": {
+                "ApiKey": "sk-your-openai-key",
+                "Model": "dall-e-3",
+                "BaseUrl": "https://api.openai.com/v1",
+                "SupportedSizes": [
+                    "1024x1024",
+                    "1792x1024",
+                    "1024x1792"
+                ],
+                "SupportedFormats": [
+                    "png",
+                    "jpg"
+                ],
+                "MaxImages": 1
+            },
+            "AliyunBailian": {
+                "ApiKey": "sk-8248ea",
+                "Model": "wanx-v1",
+                "BaseUrl": "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-to-image",
+                "SupportedSizes": [
+                    "1024x1024",
+                    "720x1280",
+                    "1280x720"
+                ],
+                "SupportedFormats": [
+                    "png",
+                    "jpg"
+                ],
+                "MaxImages": 4
+            }
+        },
+        "Defaults": {
+            "DefaultSize": "1024x1024",
+            "DefaultFormat": "png",
+            "DefaultCount": 1,
+            "DefaultQuality": "standard",
+            "DefaultStyle": "vivid"
+        },
+        "Cache": {
+            "Enabled": true,
+            "Path": "./image-gen-cache",
+            "ExpiryHours": 168,
+            "MaxCacheSizeMB": 1024
+        }
+    },
+    "LLM-VideoGen": {
+        "DefaultProvider": "Runway",
+        "Providers": {
+            "Runway": {
+                "ApiKey": "your-runway-api-key",
+                "Model": "gen-2",
+                "BaseUrl": "https://api.runwayml.com/v1",
+                "SupportedResolutions": [
+                    "1280x720",
+                    "1920x1080"
+                ],
+                "MaxDurationSeconds": 60,
+                "SupportedFrameRates": [
+                    24,
+                    30,
+                    60
+                ]
+            },
+            "StableVideo": {
+                "ApiKey": "your-stable-video-key",
+                "Model": "stable-video-diffusion",
+                "BaseUrl": "https://api.stability.ai/v2beta",
+                "SupportedResolutions": [
+                    "1024x576",
+                    "1280x768"
+                ],
+                "MaxDurationSeconds": 10,
+                "SupportedFrameRates": [
+                    24,
+                    30
+                ]
+            }
+        },
+        "Defaults": {
+            "DefaultResolution": "1280x720",
+            "DefaultDurationSeconds": 5,
+            "DefaultFrameRate": 24,
+            "DefaultFormat": "mp4"
+        },
+        "Cache": {
+            "Enabled": true,
+            "Path": "./video-gen-cache",
+            "ExpiryHours": 168,
+            "MaxCacheSizeGB": 10
+        }
+    }
+}
