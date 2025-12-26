@@ -36,10 +36,17 @@ public static class ServiceCollectionInit
     public static IServiceCollection AddAdminNetAi(this IServiceCollection services, IConfigurationManager configuration)
     {
         // 0. 自动扫描并加载 Configuration 目录下的配置文件
-        var configDir = Path.Combine(AppContext.BaseDirectory, "Configuration");
+        // 注意：单文件发布时 AppContext.BaseDirectory 指向临时解压目录，
+        // 需要使用可执行文件的真实路径
+        var exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+        var baseDir = !string.IsNullOrEmpty(exePath) 
+            ? Path.GetDirectoryName(exePath)! 
+            : AppContext.BaseDirectory;
+        var configDir = Path.Combine(baseDir, "Configuration");
+        
         if (Directory.Exists(configDir))
         {
-                    var jsonFiles = Directory.GetFiles(configDir, "*.json", SearchOption.AllDirectories);
+            var jsonFiles = Directory.GetFiles(configDir, "*.json", SearchOption.AllDirectories);
             foreach (var file in jsonFiles)
             {
                 configuration.AddJsonFile(file, optional: true, reloadOnChange: true);
@@ -48,7 +55,8 @@ public static class ServiceCollectionInit
         }
         else
         {
-             Console.WriteLine($"[Config] Directory not found: {configDir}");
+            Console.WriteLine($"[Config] Directory not found: {configDir}");
+            Console.WriteLine($"[Config] BaseDirectory: {baseDir}");
         }
 
         // 调试：检查 LLM-Clients 部分是否存在
