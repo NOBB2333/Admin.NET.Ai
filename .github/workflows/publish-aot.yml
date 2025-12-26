@@ -1,0 +1,64 @@
+name: Publish Multi-Platform
+
+on:
+  push:
+    tags: ["v*"] # 推送 v1.0.0 等 tag 触发
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false # 一个平台失败不影响其他
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+            artifact: HeMaCupAICheck-win-x64.zip
+          - os: ubuntu-latest
+            rid: linux-x64
+            artifact: HeMaCupAICheck-linux-x64.zip
+          - os: macos-latest
+            rid: osx-x64
+            artifact: HeMaCupAICheck-osx-x64.zip
+          - os: macos-latest
+            rid: osx-arm64
+            artifact: HeMaCupAICheck-osx-arm64.zip
+
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Publish SingleFile (${{ matrix.rid }})
+        shell: bash
+        run: |
+          dotnet publish HeMaCupAICheck/HeMaCupAICheck.csproj \
+            -c Release \
+            -r ${{ matrix.rid }} \
+            -o publish_output \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:EnableCompressionInSingleFile=true \
+            -p:IncludeAllContentForSelfExtract=true \
+            -p:DebugType=None \
+            -p:DebugSymbols=false
+
+          # 打包
+          cd publish_output
+
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            7z a -r "../${{ matrix.artifact }}" *
+          else
+            zip -r "../${{ matrix.artifact }}" *
+          fi
+
+      - name: Upload Artifact to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.artifact }}
+          tag_name: ${{ github.ref_name }}

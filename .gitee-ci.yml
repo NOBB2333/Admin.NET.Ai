@@ -1,0 +1,57 @@
+# Gitee Go CI/CD 配置
+# 文档: https://gitee.com/help/articles/4323
+
+version: "1.0"
+name: build-and-release
+displayName: 编译发布
+
+triggers:
+  push:
+    tags:
+      include:
+        - "v*"
+
+stages:
+  - name: build
+    displayName: 多平台编译
+    strategy:
+      matrix:
+        - platform: linux
+          rid: linux-x64
+          artifact: HeMaCupAICheck-linux-x64.zip
+        - platform: windows
+          rid: win-x64
+          artifact: HeMaCupAICheck-win-x64.zip
+
+    jobs:
+      - name: build-job
+        displayName: 编译 ${{ matrix.rid }}
+        runsOn: ubuntu-latest
+        container: mcr.microsoft.com/dotnet/sdk:10.0
+        steps:
+          - name: checkout
+            step: checkout@1
+
+          - name: build
+            step: shell@1
+            displayName: 发布编译
+            with:
+              script: |
+                dotnet publish HeMaCupAICheck/HeMaCupAICheck.csproj \
+                  -c Release \
+                  -r ${{ matrix.rid }} \
+                  -o publish_output \
+                  --self-contained true \
+                  -p:PublishSingleFile=true \
+                  -p:EnableCompressionInSingleFile=true \
+                  -p:DebugType=None \
+                  -p:DebugSymbols=false
+
+                cd publish_output
+                zip -r ../${{ matrix.artifact }} *
+
+          - name: upload
+            step: artifact@1
+            displayName: 上传构建产物
+            with:
+              path: ${{ matrix.artifact }}

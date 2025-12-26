@@ -1,6 +1,7 @@
 # .NET Core
 bin/
 obj/
+publish/
 
 # Visual Studio / Visual Studio Code
 .vs/
