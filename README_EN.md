@@ -32,13 +32,35 @@ Admin.NET.Ai is an enterprise-grade AI capability core library built on **.NET 1
 | 🔥 **Hot-Reload Scripting** | Natasha C# script engine for dynamic Agent logic updates |
 | 📊 **Full Observability** | Trace timeline + DevUI visual debugging |
 
+### 📋 Feature Demos Overview (Console)
+
+| # | Module | Description |
+| :---: | :--- | :--- |
+| 1 | Basic Chat & Middleware | Chat, Audit, Tokens |
+| 2 | Multi-Agent Workflow | MAF Sequential & Autonomous |
+| 3 | Structured Data Extraction | JSON Schema, TOON |
+| 4 | Smart Tools & Approval | Discover, Approval |
+| 5 | Dynamic Script Hot-Reload | Natasha Scripting |
+| 6 | Context Compression | Compression Reducers |
+| 7 | Prompt Engineering | Prompt Templates |
+| 8 | RAG Knowledge Retrieval | GraphRAG & Vector |
+| 9 | Multimodal Capabilities | Vision & Audio |
+| 10 | Conversation Persistence | Thread & Database |
+| 11 | Real-world Scenarios | Comprehensive Applications |
+| 12 | Built-in Agents | Sentiment/Knowledge Graph/Quality |
+| 13 | Middleware Deep-dive | Middleware Stack |
+| 14 | MCP Protocol | External Tool Integration |
+| 15 | Monitoring & Metrics | OpenTelemetry |
+| 16 | Storage Strategies | Hot/Cold/Vector |
+| **17** | **⭐ Media Generation** | **TTS/ASR/Image/Video** |
+
 ---
 
 ## 🚀 Quick Start
 
 ### 1. Install
 ```bash
-dotnet add package Admin.NET.Ai
+dotnet add package Admin.NET.Ai  # Not uploaded yet, add project reference manually
 ```
 
 ### 2. Register Services
