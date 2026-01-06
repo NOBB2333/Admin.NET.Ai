@@ -1,9 +1,13 @@
-using Admin.NET.Ai.Models.Workflow;
+using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
+using MafWorkflow = Microsoft.Agents.AI.Workflows.Workflow;
 
 namespace Admin.NET.Ai.Services.Monitoring;
 
+/// <summary>
+/// 工作流监控器 - 使用 MAF 原生事件
+/// </summary>
 public class WorkflowMonitor
 {
     private readonly ILogger<WorkflowMonitor> _logger;
@@ -15,80 +19,84 @@ public class WorkflowMonitor
         _telemetry = telemetry;
     }
     
-    // 监听工作流事件
-    public async Task MonitorWorkflowEventsAsync(AgentWorkflow workflow, string workflowId)
+    /// <summary>
+    /// 监听 MAF 工作流事件流
+    /// </summary>
+    public async Task MonitorAsync(
+        IAsyncEnumerable<WorkflowEvent> eventStream, 
+        string workflowId,
+        string workflowName = "Unknown")
     {
-        using var workflowActivity = _telemetry.StartWorkflowActivity(workflow.Name ?? "Unknown", workflowId);
+        using var workflowActivity = _telemetry.StartWorkflowActivity(workflowName, workflowId);
 
-        await foreach (var evt in workflow.WatchStreamAsync())
+        await foreach (var evt in eventStream)
         {
             switch (evt)
             {
-                case AiAgentRunUpdateEvent agentUpdate:
+                case AgentRunUpdateEvent agentUpdate:
                     LogAgentProgress(workflowId, agentUpdate);
                     break;
                     
-                case AiFunctionCallingEvent functionCall:
-                    LogFunctionCall(workflowId, functionCall);
+                case ExecutorCompletedEvent completed:
+                    LogExecutorCompleted(workflowId, completed, workflowActivity);
                     break;
                     
-                case AiWorkflowOutputEvent output:
-                    LogWorkflowCompletion(workflowId, output, workflowActivity);
-                    break;
-                    
-                case AiWorkflowErrorEvent error:
-                    LogWorkflowError(workflowId, error, workflowActivity);
+                case ExecutorFailedEvent failed:
+                    LogExecutorFailed(workflowId, failed, workflowActivity);
                     break;
 
-                case AiWorkflowHumanInputEvent humanInput:
-                    LogHumanInputRequest(workflowId, humanInput);
+                case WorkflowOutputEvent output:
+                    LogWorkflowOutput(workflowId, output, workflowActivity);
+                    break;
+                    
+                case RequestInfoEvent requestInfo:
+                    LogHumanInputRequest(workflowId, requestInfo);
                     break;
             }
         }
     }
     
-    private void LogAgentProgress(string workflowId, AiAgentRunUpdateEvent update)
+    private void LogAgentProgress(string workflowId, AgentRunUpdateEvent update)
     {
-        // Start a short-lived activity for this update or use a span if possible.
-        // Since this is event-driven stream, mapping to spans strictly is hard without knowing end signal.
-        // We will just log an event in the current activity (which is the Workflow Activity presumably flowing, 
-        // but here we are in an async loop, so context might not flow automatically unless AsyncLocal is used).
-        
-        // For better visualization, we assume each "Update" is a significant step.
-        using var activity = _telemetry.StartAgentActivity(update.AgentName, update.Step);
+        using var activity = _telemetry.StartAgentActivity(update.ExecutorId, "Processing");
         
         _logger.LogInformation(
-            "Workflow {WorkflowId} - Agent {AgentName} Step: {Step}",
-            workflowId, update.AgentName, update.Step);
+            "Workflow {WorkflowId} - Agent {AgentId}: {Text}",
+            workflowId, update.ExecutorId, update.Update.Text);
     }
     
-    private void LogFunctionCall(string workflowId, AiFunctionCallingEvent call)
+    private void LogExecutorCompleted(string workflowId, ExecutorCompletedEvent completed, Activity? parentActivity)
     {
-        using var activity = _telemetry.StartToolActivity(call.FunctionName);
-        activity?.SetTag("tool.args", call.Arguments);
-        
-        _logger.LogInformation("Workflow {WorkflowId} - Calling {Func}({Args})", workflowId, call.FunctionName, call.Arguments);
+        _logger.LogInformation(
+            "Workflow {WorkflowId} - Executor {ExecutorId} Completed",
+            workflowId, completed.ExecutorId);
     }
     
-    private void LogWorkflowCompletion(string workflowId, AiWorkflowOutputEvent output, Activity? parentActivity)
+    private void LogExecutorFailed(string workflowId, ExecutorFailedEvent failed, Activity? parentActivity)
     {
-        _logger.LogInformation("Workflow {WorkflowId} Completed. Output: {Out}", workflowId, output.Output);
+        _logger.LogError(
+            "Workflow {WorkflowId} - Executor {ExecutorId} Failed: {Error}",
+            workflowId, failed.ExecutorId, failed.Data?.Message);
+            
+        parentActivity?.SetStatus(ActivityStatusCode.Error, failed.Data?.Message);
+    }
+    
+    private void LogWorkflowOutput(string workflowId, WorkflowOutputEvent output, Activity? parentActivity)
+    {
+        _logger.LogInformation(
+            "Workflow {WorkflowId} Completed. Output from: {Source}",
+            workflowId, output.SourceId);
         
         parentActivity?.SetStatus(ActivityStatusCode.Ok);
-        parentActivity?.SetTag("workflow.output", output.Output?.ToString());
-    }
-    
-    private void LogWorkflowError(string workflowId, AiWorkflowErrorEvent error, Activity? parentActivity)
-    {
-        _logger.LogError("Workflow {WorkflowId} Error: {Err}", workflowId, error.ErrorMessage);
-        
-        parentActivity?.SetStatus(ActivityStatusCode.Error, error.ErrorMessage);
+        parentActivity?.SetTag("workflow.source", output.SourceId);
     }
 
-    private void LogHumanInputRequest(string workflowId, AiWorkflowHumanInputEvent input)
+    private void LogHumanInputRequest(string workflowId, RequestInfoEvent requestInfo)
     {
-        _logger.LogWarning("✋ Workflow {WorkflowId} Waiting for Human Input: {Prompt}", workflowId, input.Prompt);
-        // Add event to trace
-        Activity.Current?.AddEvent(new ActivityEvent("HumanInputRequested", tags: new ActivityTagsCollection { { "prompt", input.Prompt } }));
+        _logger.LogWarning(
+            "✋ Workflow {WorkflowId} Waiting for Human Input",
+            workflowId);
+            
+        Activity.Current?.AddEvent(new ActivityEvent("HumanInputRequested"));
     }
 }

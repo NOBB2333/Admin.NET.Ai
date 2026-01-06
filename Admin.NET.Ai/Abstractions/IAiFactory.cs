@@ -17,8 +17,9 @@ public record ClientHealthStatus(
 }
 
 /// <summary>
-/// AI 工厂接口 (MEAI-first, 企业级五星标准)
-/// 支持多供应商、健康检查、重试机制、生命周期管理
+/// AI 工厂接口 (MEAI-first, 企业级标准)
+/// 职责：客户端创建、连接管理、健康检查、重试降级
+/// 注意：角色/场景配置请在调用时通过 ChatOptions.Instructions 传递
 /// </summary>
 public interface IAiFactory : IDisposable, IAsyncDisposable
 {

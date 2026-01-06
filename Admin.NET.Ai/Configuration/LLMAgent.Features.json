@@ -1,5 +1,4 @@
 {
-    // 这个文件是做什么的，忘记了，先放着吧，等会儿再看。
     "LLM-AgentWorkflow": {
         "Enabled": true,
         "WorkflowPath": "./workflows",

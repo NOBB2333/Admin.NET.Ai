@@ -1,4 +1,3 @@
-using Admin.NET.Ai.Abstractions;
 using Admin.NET.Ai.Options;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -8,21 +7,21 @@ using Microsoft.Extensions.Options;
 namespace Admin.NET.Ai.Services.MCP;
 
 /// <summary>
-/// MCP 服务健康检查
+/// MCP 服务健康检查 - 使用 McpToolFactory
 /// </summary>
 public class McpHealthCheck : IHealthCheck
 {
     private readonly ILogger<McpHealthCheck> _logger;
-    private readonly IMcpConnectionPool _connectionPool;
+    private readonly McpToolFactory _factory;
     private readonly IOptions<LLMMcpConfig> _options;
 
     public McpHealthCheck(
         ILogger<McpHealthCheck> logger,
-        IMcpConnectionPool connectionPool,
+        McpToolFactory factory,
         IOptions<LLMMcpConfig> options)
     {
         _logger = logger;
-        _connectionPool = connectionPool;
+        _factory = factory;
         _options = options;
     }
 
@@ -30,68 +29,47 @@ public class McpHealthCheck : IHealthCheck
     {
         var data = new Dictionary<string, object>();
         var unhealthyServers = new List<string>();
-        var degradedServers = new List<string>();
+        var healthyServers = new List<string>();
 
-        foreach (var server in _options.Value.Servers)
+        foreach (var server in _options.Value.Servers.Where(s => s.Enabled))
         {
             try
             {
-                var status = _connectionPool.GetStatus(server.Name);
-                data[$"{server.Name}_status"] = status.ToString();
-
-                switch (status)
+                // 尝试获取客户端连接
+                var client = await _factory.GetClientAsync(server.Name);
+                
+                if (client?.ServerCapabilities != null)
                 {
-                    case McpConnectionStatus.Connected:
-                        // 尝试 ping
-                        var connection = await _connectionPool.GetConnectionAsync(server.Name, cancellationToken);
-                        var lastActive = connection.LastActiveTime;
-                        var inactiveTime = DateTime.UtcNow - lastActive;
-
-                        data[$"{server.Name}_last_active"] = lastActive.ToString("O");
-                        
-                        if (inactiveTime > TimeSpan.FromMinutes(5))
-                        {
-                            degradedServers.Add(server.Name);
-                            data[$"{server.Name}_warning"] = $"无活动时间: {inactiveTime.TotalMinutes:F1} 分钟";
-                        }
-                        break;
-
-                    case McpConnectionStatus.Disconnected:
-                    case McpConnectionStatus.Failed:
-                        unhealthyServers.Add(server.Name);
-                        break;
-
-                    case McpConnectionStatus.Connecting:
-                    case McpConnectionStatus.Reconnecting:
-                        degradedServers.Add(server.Name);
-                        break;
+                    healthyServers.Add(server.Name);
+                    data[$"{server.Name}_status"] = "Connected";
+                    data[$"{server.Name}_tools"] = client.ServerCapabilities.Tools != null;
+                    data[$"{server.Name}_resources"] = client.ServerCapabilities.Resources != null;
+                }
+                else
+                {
+                    unhealthyServers.Add(server.Name);
+                    data[$"{server.Name}_status"] = "NoCapabilities";
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "MCP 健康检查失败: {Server}", server.Name);
                 unhealthyServers.Add(server.Name);
+                data[$"{server.Name}_status"] = "Failed";
                 data[$"{server.Name}_error"] = ex.Message;
             }
         }
 
         // 汇总状态
-        data["total_servers"] = _options.Value.Servers.Count;
-        data["healthy_count"] = _options.Value.Servers.Count - unhealthyServers.Count - degradedServers.Count;
-        data["degraded_count"] = degradedServers.Count;
+        var total = _options.Value.Servers.Count(s => s.Enabled);
+        data["total_servers"] = total;
+        data["healthy_count"] = healthyServers.Count;
         data["unhealthy_count"] = unhealthyServers.Count;
 
         if (unhealthyServers.Any())
         {
             return HealthCheckResult.Unhealthy(
                 $"MCP 服务不可用: {string.Join(", ", unhealthyServers)}", 
-                data: data);
-        }
-
-        if (degradedServers.Any())
-        {
-            return HealthCheckResult.Degraded(
-                $"MCP 服务降级: {string.Join(", ", degradedServers)}", 
                 data: data);
         }
 

@@ -1,66 +1,53 @@
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Agents.AI.Workflows.Execution;
 using Microsoft.Extensions.AI;
+using MafWorkflow = Microsoft.Agents.AI.Workflows.Workflow;
 
 namespace Admin.NET.Ai.Models.Workflow;
 
 /// <summary>
-/// 代理工作流包装器
+/// Agent 工作流包装器 - 简化版
+/// 直接封装 MAF Workflow，无额外抽象
 /// </summary>
 public class AgentWorkflow
 {
-    public string Name { get; set; } = string.Empty;
-    
     /// <summary>
-    /// 包装 Microsoft.Agents.Workflows.AgentWorkflow
+    /// 工作流名称
     /// </summary>
-    public Microsoft.Agents.AI.Workflows.Workflow? InternalWorkflow { get; set; }
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// MAF 原生工作流对象
+    /// </summary>
+    public MafWorkflow? InternalWorkflow { get; set; }
 
     public override string ToString() => $"AgentWorkflow: {Name}";
 
     /// <summary>
-    /// 执行并监视工作流事件流
+    /// 执行工作流并返回 MAF 原生事件流
     /// </summary>
-    public virtual async IAsyncEnumerable<AiWorkflowEvent> WatchStreamAsync(IEnumerable<ChatMessage>? messages = null)
+    public async IAsyncEnumerable<WorkflowEvent> ExecuteAsync(ChatMessage input)
     {
         if (InternalWorkflow == null)
         {
-            yield return new AiWorkflowErrorEvent { ErrorMessage = "Internal workflow is not initialized." };
+            yield return new WorkflowErrorEvent(new Exception("工作流未初始化"));
             yield break;
         }
 
-        // 使用 MAF 的执行引擎
-        var run = await InProcessExecution.StreamAsync(InternalWorkflow, messages ?? []);
-        
-        // 使用 run.WatchStreamAsync() 进行迭代
-        await foreach (var @event in run.WatchStreamAsync(default)) 
+        await using var run = await InProcessExecution.StreamAsync(InternalWorkflow, input);
+        await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+
+        await foreach (var evt in run.WatchStreamAsync())
         {
-            // 将 MAF 事件映射到我们的内部事件
-            if (@event.GetType().Name == "AgentRunUpdateEvent")
-            {
-                // 之前属性访问失败，如果需要，使用 ToString() 或反射。
-                // 目前，使用通用描述
-                yield return new AiAgentRunUpdateEvent 
-                { 
-                    AgentName = "Agent", // 占位符
-                    Step = @event.ToString() ?? "Processing..." 
-                };
-            }
-            else if (@event.GetType().Name == "WorkflowOutputEvent")
-            {
-                 // 尝试通过 dynamic 访问 Output 或仅使用 ToString
-                 // yield return new AiWorkflowOutputEvent { Output = output.Output }; // 失败
-                 yield return new AiWorkflowOutputEvent { Output = @event.ToString() };
-            }
-            else if (@event.GetType().Name == "WorkflowErrorEvent")
-            {
-                 yield return new AiWorkflowErrorEvent { ErrorMessage = @event.ToString() ?? "Unknown Error" };
-            }
-            // 回退
-            else 
-            {
-                // yield return new AiWorkflowOutputEvent { Output = @event.ToString() };
-            }
+            yield return evt;
         }
+    }
+
+    /// <summary>
+    /// 执行工作流（字符串输入）
+    /// </summary>
+    public IAsyncEnumerable<WorkflowEvent> ExecuteAsync(string input)
+    {
+        return ExecuteAsync(new ChatMessage(ChatRole.User, input));
     }
 }

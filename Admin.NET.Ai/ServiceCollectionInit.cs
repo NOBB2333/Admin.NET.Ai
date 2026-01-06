@@ -1,4 +1,5 @@
 using Admin.NET.Ai.Abstractions;
+using Admin.NET.Ai.Configuration;
 using Admin.NET.Ai.Core;
 using Admin.NET.Ai.Middleware;
 using Admin.NET.Ai.Services;
@@ -14,8 +15,10 @@ using Admin.NET.Ai.Storage;
 using Admin.NET.Ai.Services.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.AI;
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Configuration;
+using IChatReducer = Admin.NET.Ai.Abstractions.IChatReducer;
 
 // 用于 CSharpScriptEngine，如果没有移动？我移动了它。
 // using Admin.NET.Ai.Services.Workflow.Checkpoint;
@@ -49,7 +52,8 @@ public static class ServiceCollectionInit
             var jsonFiles = Directory.GetFiles(configDir, "*.json", SearchOption.AllDirectories);
             foreach (var file in jsonFiles)
             {
-                configuration.AddJsonFile(file, optional: true, reloadOnChange: true);
+                // 使用支持注释的 JSON 加载器（允许 // 和 /* */ 注释，与 Furion 框架一致）
+                configuration.AddJsonFileWithComments(file, optional: true, reloadOnChange: true);
                 Console.WriteLine($"[Config] Loaded: {file}");
             }
         }
@@ -85,14 +89,16 @@ public static class ServiceCollectionInit
         services.Configure<Admin.NET.Ai.Options.LLMImageGenConfig>(configuration.GetSection("LLM-ImageGen"));
         services.Configure<Admin.NET.Ai.Options.LLMVideoGenConfig>(configuration.GetSection("LLM-VideoGen"));
 
-
         // 1. 注册核心服务
         services.TryAddScoped<IAiService, AiService>();
         services.TryAddSingleton<IAiFactory, AiFactory>();
         services.TryAddSingleton<AiPipelineBuilder>();
         
-        // DevUI 集成
-        services.AddDevUI();
+        // 1.1 注册 Keyed ChatClients (MEAI 标准)
+        services.AddKeyedChatClients(configuration);
+        
+        // DevUI 集成 (MAF 真实实现)
+        services.AddMafDevUI();
         
         // 2. 注册存储 (默认内存，实际可配置)
         services.TryAddSingleton<IChatMessageStore, InMemoryChatMessageStore>();
@@ -120,16 +126,14 @@ public static class ServiceCollectionInit
         services.TryAddScoped<AuditMiddleware>();
         services.TryAddScoped<ToolMonitoringMiddleware>();
         services.TryAddScoped<ToolValidationMiddleware>();
-        services.TryAddScoped<ContextInjectionMiddleware>();
 
         // 4. 注册业务服务
         // 工具和提示
-        services.TryAddSingleton<IMcpClient, McpClientService>();
         services.TryAddSingleton<IPromptManager, PromptManager>();
         services.TryAddSingleton<ToolManager>();
         
-        // MCP 连接池和工具发现
-        services.TryAddSingleton<IMcpConnectionPool, Admin.NET.Ai.Services.MCP.McpConnectionPool>();
+        // MCP 工具工厂 (使用官方 SDK)
+        services.TryAddSingleton<Admin.NET.Ai.Services.MCP.McpToolFactory>();
         services.TryAddSingleton<Admin.NET.Ai.Services.MCP.McpToolDiscoveryService>();
         services.TryAddSingleton<Admin.NET.Ai.Services.MCP.McpServerService>();
 
@@ -223,6 +227,30 @@ public static class ServiceCollectionInit
         });
 
         return services;
+    }
+    
+    /// <summary>
+    /// 注册 Keyed ChatClients (MEAI 标准)
+    /// 支持通过 [FromKeyedServices("ClientName")] 注入
+    /// </summary>
+    private static void AddKeyedChatClients(this IServiceCollection services, IConfiguration configuration)
+    {
+        var clientsSection = configuration.GetSection("LLM-Clients:Clients");
+        var clientNames = clientsSection.GetChildren().Select(c => c.Key).ToList();
+        
+        foreach (var name in clientNames)
+        {
+            // 使用工厂方法注册 Keyed Singleton
+            services.AddKeyedSingleton<IChatClient>(name, (sp, key) =>
+            {
+                var factory = sp.GetRequiredService<IAiFactory>();
+                var clientName = key?.ToString() ?? name;
+                return factory.GetChatClient(clientName) 
+                    ?? throw new InvalidOperationException($"Failed to create ChatClient '{clientName}'");
+            });
+        }
+        
+        Console.WriteLine($"[DI] Registered {clientNames.Count} Keyed ChatClients: {string.Join(", ", clientNames)}");
     }
 }
 

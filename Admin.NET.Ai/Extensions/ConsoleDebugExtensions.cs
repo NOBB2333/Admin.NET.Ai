@@ -1,3 +1,4 @@
+using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 using System.Text;
 
@@ -25,8 +26,6 @@ public static class ConsoleDebugExtensions
                     Console.Write(update.Text);
                     fullResponse.Append(update.Text);
                 }
-                
-                // 这里还可以处理 update.AdditionalProperties 中的 Token 使用量等元数据
             }
         }
         catch (Exception ex)
@@ -35,31 +34,36 @@ public static class ConsoleDebugExtensions
             throw;
         }
 
-        Console.WriteLine(); // 换行
-        
-        if (showUsage)
-        {
-             // 如果有 TraceId 或其他上下文，可以在这里扩展打印
-             // Console.WriteLine($"[统计信息] Length: {fullResponse.Length}");
-        }
-
+        Console.WriteLine();
         return fullResponse.ToString();
     }
 
     /// <summary>
-    /// [Debug] 将工作流事件流实时打印到控制台
+    /// [Debug] 将 MAF 工作流事件流实时打印到控制台
     /// </summary>
     public static async Task WriteToConsoleAsync(
-        this IAsyncEnumerable<Admin.NET.Ai.Models.Workflow.AiWorkflowEvent> events)
+        this IAsyncEnumerable<WorkflowEvent> events)
     {
-        await foreach (var @event in events)
+        await foreach (var evt in events)
         {
-            if (@event is Admin.NET.Ai.Models.Workflow.AiAgentRunUpdateEvent update)
-                Console.WriteLine($"[Agent {update.AgentName}] {update.Step}...");
-            else if (@event is Admin.NET.Ai.Models.Workflow.AiWorkflowOutputEvent output)
-                Console.WriteLine($"\n[最终结果]:\n{output.Output}");
-            else if (@event is Admin.NET.Ai.Models.Workflow.AiWorkflowErrorEvent error)
-                Console.WriteLine($"[错误] {error.ErrorMessage}");
+            switch (evt)
+            {
+                case AgentRunUpdateEvent agentUpdate:
+                    Console.Write(agentUpdate.Update.Text);
+                    break;
+                    
+                case ExecutorCompletedEvent completed:
+                    Console.WriteLine($"\n[✓ {completed.ExecutorId}]");
+                    break;
+                    
+                case ExecutorFailedEvent failed:
+                    Console.WriteLine($"\n[✗ {failed.ExecutorId}] {failed.Data?.Message}");
+                    break;
+                    
+                case WorkflowOutputEvent output:
+                    Console.WriteLine($"\n[最终结果 from {output.SourceId}]:\n{output.Data}");
+                    break;
+            }
         }
     }
 }

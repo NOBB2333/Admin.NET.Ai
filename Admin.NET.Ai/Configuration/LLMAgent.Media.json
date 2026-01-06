@@ -5,7 +5,7 @@
         "DefaultProvider": "AliyunBailian-qwen3-tts-flash",
         "Providers": {
             "AliyunBailian-qwen3-tts-flash": {
-                "ApiKey": "sk-8242f37",
+                "ApiKey": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
                 "Model": "qwen3-tts-flash",
                 "Voice": "Cherry", // 更多选择见doc
                 "language_type": "Chinese",
@@ -17,7 +17,7 @@
                 "Doc": "https://bailian.console.aliyun.com/?spm=5176.29619931.J_PvCec88exbQTi-U433Fxg.5.74cd10d7YoRPtI&tab=doc#/doc/?type=model&url=2879134"
             },
             "AliyunBailian-qwen3-tts": {
-                "ApiKey": "sk-8248ea",
+                "ApiKey": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
                 "Model": "qwen3-tts-flash",
                 "Voice": "Cherry", // 更多选择见doc
                 "language_type": "Chinese",
@@ -30,7 +30,7 @@
             },
             // 这个是复制声音。输出11国语言  好像不适合这里哦 等他发展发展在看  感觉不对劲 怎么只有http 没有包呢
             "AliyunBailian-qwen-voice-enrollment": {
-                "ApiKey": "sk-8248ea",
+                "ApiKey": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
                 "Model": "qwen-voice-enrollment",
                 "Stream": true, // 流式输出就是 base64 持续返回可，并在最后一个数据包中包含完整音频的 URL。
                 "Style": "general",
@@ -47,7 +47,7 @@
         "DefaultProvider": "AliyunBailian",
         "Providers": {
             "AliyunBailian-fun-asr": {
-                "ApiKey": "sk-8248ea",
+                "ApiKey": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
                 "Model": "fun-asr",
                 "BaseUrl": "https://dashscope.aliyuncs.com/api/v1/services/audio/asr",
                 "SupportedLanguages": [
@@ -61,7 +61,7 @@
                 "EnableSpeakerDiarization": false
             },
             "AliyunBailian-qwen3-asr-flash-filetrans": {
-                "ApiKey": "sk-8248ea",
+                "ApiKey": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
                 "Model": "qwen3-asr-flash-filetrans",
                 "BaseUrl": "https://dashscope.aliyuncs.com/api/v1/services/audio/asr",
                 "SupportedLanguages": [
@@ -114,7 +114,7 @@
                 "MaxImages": 1
             },
             "AliyunBailian": {
-                "ApiKey": "sk-8248ea",
+                "ApiKey": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
                 "Model": "wanx-v1",
                 "BaseUrl": "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-to-image",
                 "SupportedSizes": [

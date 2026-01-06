@@ -1,90 +1,207 @@
 using Admin.NET.Ai.Options;
-using Admin.NET.Ai.Services.Tools;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System.Text.Json;
-using System.Text.Json.Nodes;
+using ModelContextProtocol.Client;
+using System.Collections.Concurrent;
 
 namespace Admin.NET.Ai.Services.MCP;
 
-public class McpToolFactory
+/// <summary>
+/// MCP 工具工厂 - 使用官方 ModelContextProtocol SDK
+/// 
+/// 📌 核心功能:
+/// - 管理多个 MCP 服务器连接
+/// - 自动加载工具 (作为 AITool)
+/// - 支持 Stdio 传输
+/// 
+/// 📖 使用方式:
+/// var tools = await factory.LoadAllToolsAsync();
+/// var result = await factory.CallToolAsync("serverName", "toolName", args);
+/// </summary>
+public class McpToolFactory : IAsyncDisposable
 {
-    private readonly McpClientService _clientService;
-    private readonly LLMAgentOptions _options;
     private readonly ILogger<McpToolFactory> _logger;
+    private readonly IOptions<LLMMcpConfig> _options;
+    private readonly ConcurrentDictionary<string, McpClient> _clients = new();
+    private readonly SemaphoreSlim _connectionLock = new(1, 1);
 
     public McpToolFactory(
-        McpClientService clientService, 
-        IOptions<LLMAgentOptions> options, 
-        ILogger<McpToolFactory> logger)
+        ILogger<McpToolFactory> logger,
+        IOptions<LLMMcpConfig> options)
     {
-        _clientService = clientService;
-        _options = options.Value;
         _logger = logger;
+        _options = options;
     }
 
+    #region 核心工具加载方法
+
     /// <summary>
-    /// 连接到所有配置的 MCP 服务器并将其工具转换为 AITools。
+    /// 加载所有已配置服务器的工具 (用于 Agent ChatOptions)
     /// </summary>
-    /// <returns>准备好供 Agent 使用的 AITools 列表。</returns>
-    public async Task<List<AITool>> LoadGlobalMcpToolsAsync()
+    public async Task<List<AITool>> LoadAllToolsAsync()
     {
-        var aiTools = new List<AITool>();
+        var allTools = new List<AITool>();
 
-        foreach (var serverConfig in _options.LLMMcp.Servers)
+        foreach (var serverConfig in _options.Value.Servers.Where(s => s.Enabled))
         {
-            if (!serverConfig.Enabled || string.IsNullOrEmpty(serverConfig.Name)) continue;
-
             try
             {
-                // 确保连接
-                await _clientService.ConnectAsync(serverConfig.Name);
-                
-                // 获取工具名称
-                // 注意：GetToolsAsync 目前返回 List<string>。
-                // 在实际实现中，我们需要完整的架构 (描述、参数) 来构建 AITool。
-                // 为了让这个工厂完全工作，McpClientService.GetToolsAsync 应该返回更多细节。
-                // 对于这个 "工厂" 演示，我们假设我们可以获取细节，或者如果是动态的，我们逐个获取。
-                // 限制：当前的 McpClientService.GetToolsAsync 只返回名称。
-                // 我们将使用约定模拟获取细节，或者如果需要，更新 ClientService。
-                // 目前，有效的工具只是名称，我们将创建一个通用的架构工具。
-                
-                var toolNames = await _clientService.GetToolsAsync(serverConfig.Name);
-                foreach (var toolName in toolNames)
-                {
-                    aiTools.Add(CreateMcpTool(toolName, serverConfig.Name));
-                }
+                var tools = await GetServerToolsAsync(serverConfig.Name);
+                allTools.AddRange(tools);
+                _logger.LogInformation("✅ [MCP] 加载 {Count} 个工具: {Server}", tools.Count, serverConfig.Name);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to load MCP tools from server: {ServerName}", serverConfig.Name);
+                _logger.LogError(ex, "❌ [MCP] 加载工具失败: {Server}", serverConfig.Name);
             }
         }
 
-        return aiTools;
+        return allTools;
     }
 
-    private AITool CreateMcpTool(string toolName, string serverName)
+    /// <summary>
+    /// 获取指定服务器的所有工具
+    /// </summary>
+    public async Task<List<AITool>> GetServerToolsAsync(string serverName)
     {
-        // 定义执行逻辑
-        Func<IDictionary<string, object?>, CancellationToken, Task<object?>> handler = async (args, ct) =>
-        {
-            // 将 args 转换为 McpClientService 期望的字典格式
-            // McpClientService 期望 Dictionary<string, object>，但 args 是 IDictionary<string, object?>
-            var safeArgs = args.ToDictionary(k => k.Key, v => v.Value ?? "");
-            return await _clientService.CallToolAsync(serverName, toolName, safeArgs);
-        };
+        var client = await GetOrCreateClientAsync(serverName);
+        var tools = await client.ListToolsAsync();
+        
+        // SDK 的 McpClientTool 直接实现 AITool 接口
+        return tools.Cast<AITool>().ToList();
+    }
 
-        // 创建 AIFunction (这是一个 AITool)
-        // 我们使用 AIFunctionFactory.Create，它接受一个 Delegate。
-        // 但是 AIFunctionFactory.Create 通常期望一个强类型的委托或特定的签名。
-        // 它具有包装通用 Func<IDictionary<string, object?>, ...> 的功能。
+    /// <summary>
+    /// 调用指定工具
+    /// </summary>
+    public async Task<object?> CallToolAsync(
+        string serverName, 
+        string toolName, 
+        IReadOnlyDictionary<string, object?>? arguments = null)
+    {
+        _logger.LogInformation("🔧 [MCP] 调用: {Server}.{Tool}", serverName, toolName);
         
-        // 注意：AIFunctionFactory.Create 重载可能因版本而异。
-        // 如果我们需要动态参数，我们通常提供 JsonElement 或 Dictionary。
-        // 让我们依赖接受 Delegate 的重载。
+        var client = await GetOrCreateClientAsync(serverName);
+        var result = await client.CallToolAsync(toolName, arguments);
         
-        return AIFunctionFactory.Create(handler, toolName, $"Dynamic MCP Tool '{toolName}' from '{serverName}'");
+        return result;
+    }
+
+    #endregion
+
+    #region 资源和提示访问
+
+    /// <summary>
+    /// 获取服务器资源列表
+    /// </summary>
+    public async Task<IEnumerable<object>> GetResourcesAsync(string serverName)
+    {
+        var client = await GetOrCreateClientAsync(serverName);
+        return await client.ListResourcesAsync();
+    }
+
+    /// <summary>
+    /// 获取服务器提示模板列表
+    /// </summary>
+    public async Task<IEnumerable<object>> GetPromptsAsync(string serverName)
+    {
+        var client = await GetOrCreateClientAsync(serverName);
+        return await client.ListPromptsAsync();
+    }
+
+    #endregion
+
+    #region 连接管理
+
+    /// <summary>
+    /// 获取原生 SDK 客户端 (用于高级场景)
+    /// </summary>
+    public async Task<McpClient> GetClientAsync(string serverName)
+    {
+        return await GetOrCreateClientAsync(serverName);
+    }
+
+    private async Task<McpClient> GetOrCreateClientAsync(string serverName)
+    {
+        if (_clients.TryGetValue(serverName, out var existing))
+        {
+            return existing;
+        }
+
+        await _connectionLock.WaitAsync();
+        try
+        {
+            if (_clients.TryGetValue(serverName, out existing))
+            {
+                return existing;
+            }
+
+            var config = GetServerConfig(serverName);
+            _logger.LogInformation("🔌 [MCP] 连接: {Server}", serverName);
+
+            var client = await CreateClientAsync(config);
+            _clients[serverName] = client;
+
+            _logger.LogInformation("✅ [MCP] 已连接: {Server} (Tools={Tools}, Resources={Resources})",
+                serverName,
+                client.ServerCapabilities?.Tools != null,
+                client.ServerCapabilities?.Resources != null);
+
+            return client;
+        }
+        finally
+        {
+            _connectionLock.Release();
+        }
+    }
+
+    private McpServerConfig GetServerConfig(string serverName)
+    {
+        var config = _options.Value.Servers.FirstOrDefault(s => s.Name == serverName);
+        if (config == null)
+        {
+            throw new ArgumentException($"MCP 服务器配置不存在: {serverName}");
+        }
+        return config;
+    }
+
+    private async Task<McpClient> CreateClientAsync(McpServerConfig config)
+    {
+        var transport = new StdioClientTransport(new StdioClientTransportOptions
+        {
+            Name = config.Name,
+            Command = config.Command ?? "dotnet",
+            Arguments = config.Arguments ?? []
+        });
+
+        _logger.LogDebug("[MCP] Stdio: {Command} {Args}", 
+            config.Command, 
+            string.Join(" ", config.Arguments ?? []));
+
+        return await McpClient.CreateAsync(transport, new McpClientOptions
+        {
+            ClientInfo = new() { Name = "Admin.NET.Ai", Version = "1.0.0" }
+        });
+    }
+
+    #endregion
+
+    public async ValueTask DisposeAsync()
+    {
+        foreach (var (name, client) in _clients)
+        {
+            try
+            {
+                await client.DisposeAsync();
+                _logger.LogDebug("[MCP] 已释放: {Server}", name);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[MCP] 释放失败: {Server}", name);
+            }
+        }
+        _clients.Clear();
+        _connectionLock.Dispose();
     }
 }

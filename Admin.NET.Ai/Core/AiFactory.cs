@@ -19,8 +19,8 @@ using MEAI = Microsoft.Extensions.AI;
 using AzureOpenAIClient = Azure.AI.OpenAI.AzureOpenAIClient;
 
 /// <summary>
-/// AI 工厂实现 (MEAI 管道 + 懒加载 + 多供应商 + 企业级五星标准)
-/// 支持：健康检查、降级重试、配置热重载、完整生命周期管理
+/// AI 工厂实现 (MEAI 管道 + 懒加载 + 配置驱动 + 企业级标准)
+/// 架构简化：统一使用 OpenAI 兼容协议，能力声明完全由配置驱动
 /// </summary>
 public class AiFactory : IAiFactory
 {
@@ -53,7 +53,7 @@ public class AiFactory : IAiFactory
         // 监听配置变更，自动刷新客户端
         _optionsChangeToken = _optionsMonitor.OnChange(OnConfigurationChanged);
         
-        _logger.LogInformation("AiFactory initialized with {ClientCount} client configurations, default: {DefaultProvider}", 
+        _logger.LogInformation("AiFactory initialized with {ClientCount} clients, default: {DefaultProvider}", 
             _options.Clients.Count, _options.DefaultProvider);
     }
     
@@ -108,65 +108,214 @@ public class AiFactory : IAiFactory
         }
 
         // 1. 根据供应商类型创建基础客户端
-        IChatClient innerClient = CreateBaseClient(config);
+        IChatClient innerClient = CreateBaseClient(config, name);
 
-        // 2. 构建中间件管道 (Pipeline Construction)
+        // 2. 构建中间件管道 (Pipeline Construction) - 支持配置驱动
         var builder = new ChatClientBuilder(innerClient);
+        var pipeline = config.Pipeline ?? new PipelineConfig();
         
-        // --- 核心中间件链 (执行顺序: 外 -> 内) ---
-        // 注意：Builder.Use 的顺序是 "Outer to Inner" (当请求进入时)
-        // 也就是说，第一个 Use 的中间件是最外层。
+        // --- 中间件管道 (执行顺序: 外 -> 内) ---
+        // 请求流向: 外层 → 内层 → 模型
+        // 响应流向: 模型 → 内层 → 外层
+        
+        // ========== 第一层：基础设施 ==========
         
         // [1] 重试 (最外层，处理所有下游的网络/瞬态错误)
-        builder.Use(inner => ActivatorUtilities.CreateInstance<Admin.NET.Ai.Middleware.RetryMiddleware>(_serviceProvider, inner));
+        if (pipeline.EnableRetry)
+        {
+            builder.Use(inner => ActivatorUtilities.CreateInstance<Admin.NET.Ai.Middleware.RetryMiddleware>(_serviceProvider, inner));
+        }
         
         // [2] 限流 (尽早拒绝)
-        builder.Use(inner => ActivatorUtilities.CreateInstance<Admin.NET.Ai.Middleware.RateLimitingMiddleware>(_serviceProvider, inner));
+        if (pipeline.EnableRateLimiting)
+        {
+            builder.Use(inner => ActivatorUtilities.CreateInstance<Admin.NET.Ai.Middleware.RateLimitingMiddleware>(_serviceProvider, inner));
+        }
         
-        // [3] 日志 (记录所有请求，包括被缓存拦截的)
-        builder.Use(inner => ActivatorUtilities.CreateInstance<Admin.NET.Ai.Middleware.LoggingMiddleware>(_serviceProvider, inner));
+        // ========== 第二层：可观测性 ==========
         
-        // [4] 审计 (业务审计，同样记录用户意图)
-        builder.Use(inner => ActivatorUtilities.CreateInstance<Admin.NET.Ai.Middleware.AuditMiddleware>(_serviceProvider, inner));
+        // [3] 日志 (记录所有请求)
+        if (pipeline.EnableLogging)
+        {
+            builder.Use(inner => ActivatorUtilities.CreateInstance<Admin.NET.Ai.Middleware.LoggingMiddleware>(_serviceProvider, inner));
+        }
         
-        // [5] 缓存 (如果在缓存中找到，则短路后续调用)
-        builder.Use(inner => ActivatorUtilities.CreateInstance<Admin.NET.Ai.Middleware.CachingMiddleware>(_serviceProvider, inner));
+        // [4] 审计 (业务审计)
+        if (pipeline.EnableAudit)
+        {
+            builder.Use(inner => ActivatorUtilities.CreateInstance<Admin.NET.Ai.Middleware.AuditMiddleware>(_serviceProvider, inner));
+        }
         
-        // [6] Token监控与计费 (仅针对实际穿透缓存到达模型的请求进行计费)
-        builder.Use(inner => ActivatorUtilities.CreateInstance<Admin.NET.Ai.Middleware.TokenMonitoringMiddleware>(_serviceProvider, inner));
+        // [5] RAG 追踪 (TODO: 转换为 DelegatingChatClient)
+        // 注意：RAGTracingMiddleware 实现 IRunMiddleware，需要重构才能用于 ChatClientBuilder
+        // if (pipeline.EnableRAGTracing)
+        // {
+        //     builder.Use(inner => ActivatorUtilities.CreateInstance<Admin.NET.Ai.Middleware.RAGTracingMiddleware>(_serviceProvider, inner));
+        // }
+        
+        // ========== 第三层：业务处理 ==========
+        
+        // [6] 边界检查 (TODO: 转换为 DelegatingChatClient)
+        // 注意：BoundaryCheckMiddleware 实现 IRunMiddleware，需要重构
+        // if (pipeline.EnableBoundaryCheck)
+        // {
+        //     builder.Use(inner => ActivatorUtilities.CreateInstance<Admin.NET.Ai.Middleware.BoundaryCheckMiddleware>(_serviceProvider, inner));
+        // }
+        
+        // [7] 指令注入 (TODO: 转换为 DelegatingChatClient)
+        // 注意：InstructionMiddleware 实现 IRunMiddleware，需要重构
+        // if (pipeline.EnableInstruction)
+        // {
+        //     builder.Use(inner => ActivatorUtilities.CreateInstance<Admin.NET.Ai.Middleware.InstructionMiddleware>(_serviceProvider, inner));
+        // }
+        
+        // [8] 缓存 (如果在缓存中找到，则短路后续调用)
+        if (pipeline.EnableCaching)
+        {
+            builder.Use(inner => ActivatorUtilities.CreateInstance<Admin.NET.Ai.Middleware.CachingMiddleware>(_serviceProvider, inner));
+        }
+        
+        // ========== 第四层：成本控制 ==========
+        
+        // [9] Token 监控与计费
+        if (pipeline.EnableTokenMonitoring)
+        {
+            builder.Use(inner => ActivatorUtilities.CreateInstance<Admin.NET.Ai.Middleware.TokenMonitoringMiddleware>(_serviceProvider, inner));
+        }
+        
+        // ========== 第五层：上下文管理 ==========
+        
+        // [10] Chat Reducer (上下文压缩)
+        // 注意：项目已有 IChatReducer 接口和多种实现
+        // 详见 Admin.NET.Ai.Services.Context 目录
+        // 实际的压缩配置使用独立的 CompressionConfig
+        if (pipeline.EnableChatReducer)
+        {
+            _logger.LogDebug("Chat Reducer enabled: Type={Type}", 
+                pipeline.ChatReducerType ?? "MessageCounting (default)");
+            // TODO: 需要实现 ReducerChatClient 包装器来集成 IChatReducer 到 ChatClientBuilder
+        }
+        
+        // ========== 第六层：工具处理 ==========
+        
+        // [11] 工具验证 (TODO: 转换为 DelegatingChatClient)
+        // 注意：ToolValidationMiddleware 实现 IRunMiddleware，需要重构
+        // if (pipeline.EnableToolValidation)
+        // {
+        //     builder.Use(inner => ActivatorUtilities.CreateInstance<Admin.NET.Ai.Middleware.ToolValidationMiddleware>(_serviceProvider, inner));
+        // }
+        
+        // [12] 工具监控 (TODO: 转换为 DelegatingChatClient)
+        // 注意：ToolMonitoringMiddleware 实现 IRunMiddleware，需要重构
+        // if (pipeline.EnableToolMonitoring)
+        // {
+        //     builder.Use(inner => ActivatorUtilities.CreateInstance<Admin.NET.Ai.Middleware.ToolMonitoringMiddleware>(_serviceProvider, inner));
+        // }
+        
+        // [13] Tool Reduction (工具精简 - 需要 Embedding 服务)
+        // if (pipeline.EnableToolReduction)
+        // {
+        //     var embeddingGenerator = _serviceProvider.GetService<IEmbeddingGenerator<string, Embedding<float>>>();
+        //     if (embeddingGenerator != null)
+        //     {
+        //         var strategy = new EmbeddingToolReductionStrategy(embeddingGenerator, pipeline.ToolLimit)
+        //         {
+        //             IsRequiredTool = tool => pipeline.RequiredToolPrefixes?.Any(p => tool.Name.StartsWith(p)) ?? false
+        //         };
+        //         builder.UseToolReduction(strategy);
+        //     }
+        // }
+        
+        // [14] Function Calling (使用 MEAI 内置 - 最内层)
+        if (pipeline.EnableFunctionInvocation)
+        {
+            builder.UseFunctionInvocation(configure: options =>
+            {
+                options.AllowConcurrentInvocation = pipeline.AllowConcurrentInvocation;
+                options.IncludeDetailedErrors = pipeline.IncludeDetailedErrors;
+                options.MaximumIterationsPerRequest = pipeline.MaxIterationsPerRequest;
+            });
+        }
 
         return builder.Build();
     }
 
-    private IChatClient CreateBaseClient(LLMClientConfig config)
+    /// <summary>
+    /// 创建基础客户端 - 统一使用 OpenAI 兼容协议
+    /// 所有主流供应商都兼容 OpenAI API，只需配置不同的 BaseUrl
+    /// </summary>
+    private IChatClient CreateBaseClient(LLMClientConfig config, string clientName)
     {
-        // 规范化供应商名称
-        var provider = config.Provider?.ToLowerInvariant() ?? "generic";
-
-        return provider switch
+        // 验证必要配置
+        if (string.IsNullOrEmpty(config.ApiKey))
         {
-            "azure" or "azureopenai" => CreateAzureClient(config),
-            "openai" => CreateOpenAIClient(config),
-            _ => CreateGenericClient(config) // DeepSeek、SiliconFlow 等兼容 OpenAI
-        };
-    }
-
-    private IChatClient CreateAzureClient(LLMClientConfig config)
-    {
-        var endpoint = new Uri(config.BaseUrl); // Azure 需要 Endpoint
-        var credential = new ApiKeyCredential(config.ApiKey);
+            throw new ArgumentException($"ApiKey is required for client '{clientName}'");
+        }
+        if (string.IsNullOrEmpty(config.ModelId))
+        {
+            throw new ArgumentException($"ModelId is required for client '{clientName}'");
+        }
         
-        // 使用 Azure.AI.OpenAI SDK
-        var azureClient = new AzureOpenAIClient(endpoint, credential);
-        return new PrivateOpenAIAdapter(azureClient.GetChatClient(config.ModelId));
+        // 统一创建 - 所有供应商都走 OpenAI 兼容协议
+        var options = new OpenAIClientOptions();
+        
+        // 自定义端点（DeepSeek, Qwen, Claude, Gemini 等都用 BaseUrl 区分）
+        if (!string.IsNullOrEmpty(config.BaseUrl))
+        {
+            options.Endpoint = new Uri(config.BaseUrl);
+        }
+        
+        // 超时设置
+        if (config.TimeoutSeconds > 0)
+        {
+            options.NetworkTimeout = TimeSpan.FromSeconds(config.TimeoutSeconds);
+        }
+        
+        var client = new OpenAIClient(new ApiKeyCredential(config.ApiKey), options);
+        
+        _logger.LogDebug("Created client '{ClientName}' -> {BaseUrl}/{ModelId}", 
+            clientName, 
+            config.BaseUrl ?? "api.openai.com", 
+            config.ModelId);
+        
+        return new OpenAIChatClientAdapter(client.GetChatClient(config.ModelId));
     }
-
-    private IChatClient CreateOpenAIClient(LLMClientConfig config)
+    
+    /// <summary>
+    /// 获取客户端配置（合并默认值）
+    /// </summary>
+    public LLMClientConfig? GetClientConfig(string name)
     {
-        // 标准 OpenAI
-        var credential = new ApiKeyCredential(config.ApiKey);
-        var openAIClient = new OpenAIClient(credential); 
-        return new PrivateOpenAIAdapter(openAIClient.GetChatClient(config.ModelId));
+        if (!_options.Clients.TryGetValue(name, out var config))
+            return null;
+        
+        // 如果有默认配置，合并
+        if (_options.Defaults != null)
+        {
+            return config.MergeWithDefaults(_options.Defaults);
+        }
+        
+        return config;
+    }
+    
+    /// <summary>
+    /// 检查客户端是否支持指定能力
+    /// </summary>
+    public bool SupportsCapability(string name, string capability)
+    {
+        var config = GetClientConfig(name);
+        if (config == null) return false;
+        
+        return capability.ToLowerInvariant() switch
+        {
+            "vision" => config.SupportsVision,
+            "functioncalling" or "tools" => config.SupportsFunctionCalling,
+            "jsonschema" or "structuredoutput" => config.SupportsJsonSchema,
+            "thinking" => config.SupportsThinking,
+            "websearch" or "search" => config.SupportsWebSearch,
+            "streaming" => config.EnableStreaming,
+            _ => false
+        };
     }
 
     /// <summary>
@@ -287,6 +436,8 @@ public class AiFactory : IAiFactory
             return new OpenAI.Chat.ChatCompletionOptions 
             {
                  Temperature = options.Temperature,
+                 TopP = options.TopP,
+                 MaxOutputTokenCount = options.MaxOutputTokens,
             };
         }
 

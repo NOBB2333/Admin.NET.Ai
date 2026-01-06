@@ -23,7 +23,8 @@
         <PackageReference Include="Microsoft.Extensions.AI" Version="10.1.1-preview.1.25612.2" />
         <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.1" />
 
-        <!-- ModelContextProtocol.Server。这是mcp -->
+        <!-- ModelContextProtocol - MCP 官方 SDK -->
+        <PackageReference Include="ModelContextProtocol" Version="*-*" />
 
         <!-- Semantic Kernel -->
         <PackageReference Include="Microsoft.SemanticKernel" Version="1.68.0" />
@@ -65,14 +66,8 @@
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
             <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
         </None>
-    </ItemGroup>
-
-    <ItemGroup>
-        <Compile Remove="tempExample\**\*.cs" />
-    </ItemGroup>
-
-    <ItemGroup>
         <Folder Include="Example\NatashaHotReloadScript\" />
+        
     </ItemGroup>
 
 </Project>

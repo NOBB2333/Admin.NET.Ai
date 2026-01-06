@@ -1,6 +1,7 @@
 using Admin.NET.Ai.Abstractions;
 using Admin.NET.Ai.Extensions;
 using Admin.NET.Ai.Services.Data;
+using Microsoft.Agents.AI;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace HeMaCupAICheck.Demos;
@@ -38,6 +39,11 @@ public static class StructuredOutputDemo
         {
             Console.WriteLine($"❌ 提取失败: {ex.Message}");
         }
+        
+        // 方式一：RunAsync泛型方法（推荐） 直接获取强类型对象
+        // AgentRunResponse<PersonInfo> response = await client.RunAsync<PersonInfo>(
+        //     "请提供关于张三的信息，他是一名30岁的软件工程师。"
+        // );
 
         // 2. TOON 协议演示 (Token-Optimized Object Notation)
         Console.WriteLine("\n[TOON 协议序列化演示]:");

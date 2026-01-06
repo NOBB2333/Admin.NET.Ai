@@ -8,7 +8,7 @@
                         "type": "sse",
                         "name": "高德地图",
                         "description": "高德地图",
-                        "ApiKey": "0ecb18844e",
+                        "ApiKey": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
                         "BaseUrl": "https://mcp.amap.com/sse?key=您在高德官网上申请的key"
                     }
                 }
@@ -23,7 +23,7 @@
                         "name": "阿里云百炼_通义万相-图像生成",
                         "baseUrl": "https://dashscope.aliyuncs.com/api/v1/mcps/WanImage/sse",
                         "headers": {
-                            "Authorization": "Bearer sk-8242f37"
+                            "Authorization": "Bearer sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
                         }
                     }
                 }
@@ -38,7 +38,7 @@
                         "name": "阿里云百炼_证券之星",
                         "baseUrl": "https://dashscope.aliyuncs.com/api/v1/mcps/stockstar/sse",
                         "headers": {
-                            "Authorization": "Bearer sk-82437"
+                            "Authorization": "Bearer sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
                         }
                     }
                 }

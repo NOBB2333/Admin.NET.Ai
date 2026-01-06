@@ -47,15 +47,7 @@ public static class AgentMonitoringExtensions
         return services;
     }
 
-    /// <summary>
-    /// 启用 DevUI (模拟实现)
-    /// </summary>
-    public static void MapDevUI(this WebApplication app)
-    {
-        app.MapGet("/dev-ui", async context =>
-        {
-            context.Response.ContentType = "text/html";
-            await context.Response.WriteAsync("<h1>Admin.NET AI DevUI</h1><p>Agent Monitoring Dashboard (Mock)</p>");
-        });
-    }
+    // 注意: DevUI 现在使用 DevUIConfiguration.cs 中的 MapMafDevUI()
+    // 旧的 MapDevUI() 已被移除，请使用:
+    // app.MapMafDevUI(app.Environment.IsDevelopment());
 }

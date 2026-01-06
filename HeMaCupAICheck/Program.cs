@@ -68,6 +68,13 @@ while (true)
     16. 存储策略 (Hot/Cold/Vector)
     17. ★ 媒体生成 (TTS/ASR/图像/视频)
     --------------------------------------------------
+    ★★ 新增实用场景 ★★
+    18. RAG + Agent 智能问答 (知识库+推理)
+    19. MCP 日历助手 (官方SDK工具调用)
+    20. 多 Agent 文档审核 (Writer→Reviewer→Editor)
+    21. 代码生成助手 (Structured Output)
+    22. 客服智能分流 (意图识别+路由)
+    --------------------------------------------------
     0. 退出程序
     ==================================================");
     Console.ResetColor();
@@ -96,6 +103,12 @@ while (true)
             case "15": await MonitoringDemo.RunAsync(sp); break;
             case "16": await StorageDemo.RunAsync(sp); break;
             case "17": await MediaDemo.RunAsync(sp); break;
+            // ★ 新增实用场景
+            case "18": await RagAgentDemo.RunAsync(sp); break;
+            case "19": await McpCalendarDemo.RunAsync(sp); break;
+            case "20": await MultiAgentReviewDemo.RunAsync(sp); break;
+            case "21": await CodeGeneratorDemo.RunAsync(sp); break;
+            case "22": await CustomerServiceDemo.RunAsync(sp); break;
             case "99": 
                 {
                     // Reflection Inspector

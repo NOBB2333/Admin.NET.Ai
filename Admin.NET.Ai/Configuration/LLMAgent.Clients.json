@@ -1,146 +1,160 @@
 {
     "LLM-Clients": {
         "DefaultProvider": "qwen3-vl-plus",
+        "Defaults": {
+            "TimeoutSeconds": 60,
+            "MaxRetryCount": 2,
+            "EnableStreaming": true,
+            "SupportsFunctionCalling": true,
+            "SupportsJsonSchema": true,
+            "SupportsVision": false,
+            "SupportsThinking": false,
+            "MaxContextTokens": 4096,
+            "Pipeline": {
+                // ===== 第一层：基础设施 =====
+                "EnableRetry": true,
+                "EnableRateLimiting": true,
+                // ===== 第二层：可观测性 =====
+                "EnableLogging": true,
+                "EnableAudit": true,
+                "EnableRAGTracing": false,
+                // ===== 第三层：业务处理 =====
+                "EnableBoundaryCheck": false,
+                "EnableInstruction": false,
+                "EnableCaching": false,
+                "CacheDurationMinutes": 5,
+                // ===== 第四层：成本控制 =====
+                "EnableTokenMonitoring": true,
+                // ===== 第五层：上下文管理 =====
+                // 实际压缩配置见独立的 CompressionConfig (LLMAgent.Features.json)
+                "EnableChatReducer": false,
+                "ChatReducerType": "MessageCounting",
+                // ===== 第六层：工具处理 =====
+                "EnableToolValidation": false,
+                "EnableToolMonitoring": false,
+                "EnableToolReduction": false,
+                "ToolLimit": 5,
+                // ===== Function Calling =====
+                "EnableFunctionInvocation": true,
+                "AllowConcurrentInvocation": false,
+                "IncludeDetailedErrors": true,
+                "MaxIterationsPerRequest": 10
+            }
+        },
         "Clients": {
             "DeepSeek": {
-                "ApiKey": "sk-3187c4f77ef955be592",
+                "ApiKey": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
                 "ModelId": "deepseek-chat",
                 "BaseUrl": "https://api.deepseek.com/v1",
-                "TimeoutSeconds": 60,
-                "MaxRetryCount": 2,
-                "EnableStreaming": true,
                 "InPrice": 2,
                 "OutPrice": 3
             },
+            "DeepSeek-R1": {
+                "ApiKey": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                "ModelId": "deepseek-reasoner",
+                "BaseUrl": "https://api.deepseek.com/v1",
+                // 思考模式配置（仅支持思考的模型需要配置，如 DeepSeek-R1, o1, Claude 3.5 等）
+                "SupportsThinking": true,
+                "Thinking": {
+                    "EnableByDefault": true, // 默认是否启用思考模式
+                    "ShowThinkingProcess": true, // 是否在响应中显示思考过程
+                    "ThinkingParamName": "reasoning_content" // DeepSeek 的思考内容字段名
+                },
+                "InPrice": 4,
+                "OutPrice": 16
+            },
             "SiliconFlow": {
-                "ApiKey": "sk-wiseqqmrctbjjis",
+                "ApiKey": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
                 "ModelId": "Qwen/QwQ-32B",
                 "BaseUrl": "https://api.siliconflow.cn/v1/",
-                "TimeoutSeconds": 60,
-                "MaxRetryCount": 2,
-                "EnableStreaming": true,
                 "InPrice": 4,
                 "OutPrice": 4
             },
             "AliBaiLian-qwen3-max": {
-                "ApiKey": "sk-8248ea22f37",
+                "ApiKey": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
                 "ModelId": "qwen3-max",
                 "BaseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-                "TimeoutSeconds": 60,
-                "MaxRetryCount": 2,
-                "EnableStreaming": true,
                 "InPrice": 4,
                 "OutPrice": 24
             },
             "qwen3-vl-plus": {
-                "ApiKey": "sk-8248eaeb2022f37",
+                "ApiKey": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
                 "ModelId": "qwen3-vl-plus",
                 "BaseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-                "TimeoutSeconds": 60,
-                "MaxRetryCount": 2,
-                "EnableStreaming": true,
+                "SupportsVision": true,
                 "InPrice": 4,
                 "OutPrice": 24
             },
             "AliBaiLian-qwen-flash": {
-                "ApiKey": "sk-8248eaf37",
+                "ApiKey": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
                 "ModelId": "qwen-flash",
                 "BaseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-                "TimeoutSeconds": 60,
-                "MaxRetryCount": 2,
-                "EnableStreaming": true,
                 "InPrice": 0.15,
                 "OutPrice": 1.5
             },
             "AliBaiLian-qwen-plus": {
-                "ApiKey": "sk-8248e2f37",
+                "ApiKey": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
                 "ModelId": "qwen-plus",
                 "BaseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-                "TimeoutSeconds": 60,
-                "MaxRetryCount": 2,
-                "EnableStreaming": true,
                 "InPrice": 0.8,
                 "OutPrice": 2
             },
             "AliBaiLian-qwen-plus-latest": {
-                "ApiKey": "sk-8248e22f37",
+                "ApiKey": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
                 "ModelId": "qwen-plus-latest",
                 "BaseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-                "TimeoutSeconds": 60,
-                "MaxRetryCount": 2,
-                "EnableStreaming": true,
                 "InPrice": 4,
                 "OutPrice": 24
             },
             "AliBaiLian-deepseek-v3.2-exp": {
-                "ApiKey": "sk-8248eaefbf6640bb9182c2f5b2022f37",
+                "ApiKey": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
                 "ModelId": "deepseek-v3.2-exp",
                 "BaseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-                "TimeoutSeconds": 60,
-                "MaxRetryCount": 2,
-                "EnableStreaming": true,
                 "InPrice": 4,
                 "OutPrice": 24
             },
             "Gemini": {
-                "ApiKey": "AIzaSy-9g",
+                "ApiKey": "AIzaSyAxxxxxxxxxxxxxxxxxxxxxxxxxxx-9g",
                 "ModelId": "deepseek-chat",
                 "BaseUrl": "https://api.deepseek.com/v1",
-                "TimeoutSeconds": 60,
-                "MaxRetryCount": 2,
-                "EnableStreaming": true,
                 "InPrice": 2,
                 "OutPrice": 3
             },
             "Grok": {
-                "ApiKey": "xai-yRZ4Ht03B7Ceg",
+                "ApiKey": "xai-yRZ4DWE070ApVUtxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
                 "ModelId": "deepseek-chat",
                 "BaseUrl": "https://api.deepseek.com/v1",
-                "TimeoutSeconds": 60,
-                "MaxRetryCount": 2,
-                "EnableStreaming": true,
                 "InPrice": 2,
                 "OutPrice": 3
             },
             "GPT4": {
-                "ApiKey": "sk-LYX8eo8vRBazajx",
+                "ApiKey": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
                 "ModelId": "gpt-4-turbo",
                 "BaseUrl": "https://api.openai.com/v1",
                 "TimeoutSeconds": 120,
-                "MaxRetryCount": 3,
-                "EnableStreaming": true
+                "MaxRetryCount": 3
             },
             "AzureOpenAI": {
                 "ApiKey": "your-azure-openai-key",
                 "ModelId": "gpt-4",
                 "BaseUrl": "https://your-resource.openai.azure.com/",
                 "TimeoutSeconds": 120,
-                "MaxRetryCount": 3,
-                "EnableStreaming": true
+                "MaxRetryCount": 3
             },
             "Researcher": {
-                "ApiKey": "sk-318592",
+                "ApiKey": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
                 "ModelId": "deepseek-chat",
-                "BaseUrl": "https://api.deepseek.com/v1",
-                "TimeoutSeconds": 60,
-                "MaxRetryCount": 2,
-                "EnableStreaming": true
+                "BaseUrl": "https://api.deepseek.com/v1"
             },
             "Writer": {
-                "ApiKey": "sk-318755be592",
+                "ApiKey": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
                 "ModelId": "deepseek-chat",
-                "BaseUrl": "https://api.deepseek.com/v1",
-                "TimeoutSeconds": 60,
-                "MaxRetryCount": 2,
-                "EnableStreaming": true
+                "BaseUrl": "https://api.deepseek.com/v1"
             },
             "Reviewer": {
-                "ApiKey": "sk-3187cbe592",
+                "ApiKey": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
                 "ModelId": "deepseek-chat",
-                "BaseUrl": "https://api.deepseek.com/v1",
-                "TimeoutSeconds": 60,
-                "MaxRetryCount": 2,
-                "EnableStreaming": true
+                "BaseUrl": "https://api.deepseek.com/v1"
             }
         }
     }

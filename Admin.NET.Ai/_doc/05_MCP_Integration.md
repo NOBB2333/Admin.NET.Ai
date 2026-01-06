@@ -5,27 +5,115 @@ Agent 必须具备与外部世界交互的能力。但传统的 Tool 调用需�
 **MCP (模型上下文协议)** 是由 Anthropic 提出，微软深度跟进的一套标准。它的核心逻辑是：**"工具即服务"**。
 
 通过 MCP，Agent 可以：
-1.  **动态发现工具**: 只要配置一个 MCP Server 的 URL，Agent 就能自动知道它有哪些 Function。
+1.  **动态发现工具**: 只要配置一个 MCP Server 的 URL 或进程命令，Agent 就能自动知道它有哪些 Function。
 2.  **安全隔离**: 工具执行在另一个独立的进程（MCP Server）中，主程序更安全。
 3.  **标准化**: 无论是查数据库、读 GitHub 还是搜 Google，都遵循同一套 JSON-RPC 规范。
 
 ---
 
-## 🏗️ 架构设计
+## 🏗️ 架构设计 (2026-01 更新)
 
 ### 核心组件
 
 | 组件 | 位置 | 说明 |
 |------|------|------|
+| `McpToolFactory` | `Services/MCP/` | **核心** - 使用官方 SDK 的工具工厂 |
 | `McpToolAttribute` | `Services/MCP/Attributes/` | 标记方法为 MCP 工具 |
-| `McpToolDiscoveryService` | `Services/MCP/` | 自动发现并注册工具 |
+| `McpToolDiscoveryService` | `Services/MCP/` | 自动发现并注册本地工具 |
 | `McpEndpoints` | `Services/MCP/` | HTTP/SSE 端点 |
-| `McpClientService` | `Services/Tools/` | MCP 客户端 (调用外部 MCP) |
-| `McpConnectionPool` | `Services/MCP/` | 连接池管理 |
+| `McpHealthCheck` | `Services/MCP/` | 健康检查 |
+
+### 依赖包
+```xml
+<PackageReference Include="ModelContextProtocol" Version="0.5.0-preview.1" />
+```
 
 ---
 
-## ✨ 核心特性: [McpTool] 属性自动发现
+## ✨ 新 API: McpToolFactory
+
+### 加载所有服务器工具
+```csharp
+// 注入工厂
+var factory = sp.GetRequiredService<McpToolFactory>();
+
+// 加载配置中所有启用服务器的工具
+var tools = await factory.LoadAllToolsAsync();
+
+// 工具直接实现 AITool，可用于 ChatOptions
+var options = new ChatOptions { Tools = tools };
+```
+
+### 调用指定工具
+```csharp
+var result = await factory.CallToolAsync(
+    "serverName", 
+    "toolName", 
+    new Dictionary<string, object?> { ["param"] = "value" }
+);
+```
+
+### 获取原生 SDK 客户端
+```csharp
+var client = await factory.GetClientAsync("serverName");
+// 使用 SDK 原生 API
+var resources = await client.ListResourcesAsync();
+var prompts = await client.ListPromptsAsync();
+```
+
+---
+
+## ⚙️ 配置
+
+### 支持两种传输方式
+
+#### 1. Stdio (默认) - 启动本地进程
+```json
+{
+  "LLM-Mcp": {
+    "Servers": [
+      {
+        "Name": "Calendar",
+        "Enabled": true,
+        "TransportType": "stdio",
+        "Command": "dnx",
+        "Arguments": ["Mcp.CN.Calendar@", "--yes"]
+      }
+    ]
+  }
+}
+```
+
+#### 2. HTTP/SSE - 连接远程服务
+```json
+{
+  "LLM-Mcp": {
+    "Servers": [
+      {
+        "Name": "GitHub",
+        "Enabled": true,
+        "TransportType": "http",
+        "Url": "http://localhost:3000/sse"
+      }
+    ]
+  }
+}
+```
+
+### McpServerConfig 字段
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `Name` | string | 服务器名称 |
+| `Enabled` | bool | 是否启用 |
+| `TransportType` | string | `"stdio"` 或 `"http"` |
+| `Command` | string? | Stdio 启动命令 |
+| `Arguments` | string[] | Stdio 命令参数 |
+| `Url` | string | HTTP 服务地址 |
+
+---
+
+## ✨ 本地工具: [McpTool] 属性
 
 ### 使用方式
 
@@ -47,66 +135,9 @@ public WeatherInfo GetWeather(
 }
 ```
 
-### 属性选项
-
-| 属性 | 类型 | 说明 |
-|------|------|------|
-| `Name` | string? | 工具名称 (null=使用方法名转 snake_case) |
-| `Description` | string | 工具描述 (必填) |
-| `Category` | string? | 分类标签 |
-| `RequiresApproval` | bool | 是否需要审批 |
-| `TimeoutSeconds` | int | 超时时间 (默认30秒) |
-
 ---
 
-## 🛠️ 技术实现
-
-### 1. 自动发现流程
-
-```
-ASP.NET 启动
-    ↓
-McpToolDiscoveryService.DiscoverFromAssembly()
-    ↓
-扫描所有 [McpTool] 标记的方法
-    ↓
-构建 JSON Schema (参数类型/描述)
-    ↓
-注册到内部字典
-    ↓
-通过 /mcp/tools 或 SSE 暴露给客户端
-```
-
-### 2. MCP 端点
-
-| 端点 | 方法 | 说明 |
-|------|------|------|
-| `/mcp/sse` | GET | SSE 长连接，推送工具列表 |
-| `/mcp/tools` | GET | REST 获取工具列表 |
-| `/mcp/call` | POST | 调用工具 `{tool: "name", arguments: {...}}` |
-| `/mcp/messages` | POST | 标准 MCP 协议消息 |
-
-### 3. 工具调用流程
-
-```csharp
-// POST /mcp/call
-{
-    "tool": "get_weather",
-    "arguments": { "city": "北京", "unit": "celsius" }
-}
-
-// Response
-{
-    "success": true,
-    "result": { "city": "北京", "temperature": 15, ... }
-}
-```
-
----
-
-## 🚀 代码示例
-
-### 在 ASP.NET Core 中启用
+## 🚀 完整示例
 
 ```csharp
 // Program.cs
@@ -115,7 +146,7 @@ builder.Services.AddAdminNetAi(builder.Configuration);
 
 var app = builder.Build();
 
-// 发现当前程序集的 [McpTool]
+// 发现本地 [McpTool] 方法
 var discovery = app.Services.GetRequiredService<McpToolDiscoveryService>();
 discovery.DiscoverFromAssembly(typeof(Program).Assembly);
 
@@ -125,41 +156,15 @@ app.MapMcpEndpoints();
 app.Run();
 ```
 
-### 作为 MCP Client 调用外部服务
-
 ```csharp
-// 连接到外部 MCP Server
-await mcpClient.ConnectAsync("Filesystem");
+// 在 Agent 中使用
+var factory = sp.GetRequiredService<McpToolFactory>();
+var mcpTools = await factory.LoadAllToolsAsync();
 
-// 获取工具列表
-var tools = await mcpClient.GetToolsAsync("Filesystem");
-
-// 调用工具
-var result = await mcpClient.CallToolAsync("Filesystem", "read_file", 
-    new Dictionary<string, object> { ["path"] = "/etc/hosts" });
-```
-
----
-
-## ⚙️ 配置
-
-### MCP Server 配置 (`LLMAgent.Mcp.json`)
-```json
-{
-  "LLM-Mcp": {
-    "Servers": [
-      {
-        "Name": "Filesystem",
-        "Url": "http://localhost:3001/sse",
-        "Enabled": true
-      },
-      {
-        "Name": "GitHub",
-        "Url": "http://localhost:3002/sse"
-      }
-    ]
-  }
-}
+var response = await chatClient.GetResponseAsync(
+    "今天是农历几月几日？",
+    new ChatOptions { Tools = mcpTools }
+);
 ```
 
 ---
@@ -168,7 +173,5 @@ var result = await mcpClient.CallToolAsync("Filesystem", "read_file",
 
 | 角色 | 说明 |
 |------|------|
-| **MCP Client** | 调用外部 MCP Server (如 Claude Desktop 提供的工具) |
-| **MCP Server** | 暴露系统 API，让外部 AI 调用 (如让 Claude 调用业务接口) |
-
-通过 `[McpTool]` 属性，任何业务方法都可以一键暴露为 MCP 工具！
+| **MCP Client** | 连接外部 MCP Server (使用 `McpToolFactory`) |
+| **MCP Server** | 暴露本地方法 (使用 `[McpTool]` 属性) |

@@ -1,10 +1,10 @@
-using Admin.NET.Ai.Models.Workflow;
+using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.Logging;
 
 namespace Admin.NET.Ai.Services.Workflow;
 
 /// <summary>
-/// 人工介入步骤处理器
+/// 人工介入步骤处理器 - 基于 MAF
 /// </summary>
 public class HumanInputStepHandler
 {
@@ -22,7 +22,7 @@ public class HumanInputStepHandler
     /// <summary>
     /// 请求人工输入
     /// </summary>
-    public async Task<AiWorkflowHumanInputEvent> RequestInputAsync(string workflowId, string stepName, string prompt)
+    public async Task RequestInputAsync(string workflowId, string stepName, string prompt)
     {
         _logger.LogInformation("✋ [HumanInput] 工作流 {WorkflowId} 在步骤 {Step} 请求输入: {Prompt}", 
             workflowId, stepName, prompt);
@@ -31,7 +31,6 @@ public class HumanInputStepHandler
         var context = await _stateService.LoadStateAsync(workflowId);
         if (context == null)
         {
-            // 如果不存在，创建新上下文 (对于新启动的工作流)
             context = new WorkflowContext { WorkflowId = workflowId };
         }
 
@@ -42,14 +41,8 @@ public class HumanInputStepHandler
         context.LastUpdated = DateTime.UtcNow;
 
         await _stateService.SaveStateAsync(workflowId, context);
-
-        // 3. 返回事件通知 UI
-        return new AiWorkflowHumanInputEvent
-        {
-            WorkflowId = workflowId,
-            StepName = stepName,
-            Prompt = prompt
-        };
+        
+        // 注意：实际恢复需要通过 ResumeAsync 处理
     }
 
     /// <summary>
@@ -71,8 +64,5 @@ public class HumanInputStepHandler
          context.LastUpdated = DateTime.UtcNow;
 
          await _stateService.SaveStateAsync(workflowId, context);
-         
-         // 注意：实际恢复执行逻辑需要在 WorkflowService 中触发
-         // 这里只是更新状态
     }
 }

@@ -13,8 +13,8 @@ public static class ChatDemo
         Console.WriteLine("\n=== [1] 基础对话与中间件演示 ===");
         
         var aiFactory = sp.GetRequiredService<IAiFactory>();
-        // var client = aiFactory.GetDefaultChatClient();    // 获取默认的提供商
-        var client = aiFactory.GetChatClient("DeepSeek");    // 获取DeepSeek
+        var client = aiFactory.GetDefaultChatClient();    // 获取默认的提供商
+        // var client = aiFactory.GetChatClient("DeepSeek");    // 获取DeepSeek
 
         if (client == null)
         {
