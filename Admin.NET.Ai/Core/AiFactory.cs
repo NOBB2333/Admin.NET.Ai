@@ -180,7 +180,9 @@ public class AiFactory : IAiFactory
         // [9] Token 监控与计费
         if (pipeline.EnableTokenMonitoring)
         {
-            builder.Use(inner => ActivatorUtilities.CreateInstance<Admin.NET.Ai.Middleware.TokenMonitoringMiddleware>(_serviceProvider, inner));
+            var modelName = config.ModelId ?? name; // 使用配置的模型名或客户端名称
+            builder.Use(inner => ActivatorUtilities.CreateInstance<Admin.NET.Ai.Middleware.TokenMonitoringMiddleware>(
+                _serviceProvider, inner, modelName));
         }
         
         // ========== 第五层：上下文管理 ==========
@@ -342,12 +344,38 @@ public class AiFactory : IAiFactory
         {
              var messages = await ToOpenAIMessagesAsync(chatMessages, cancellationToken);
              var updates = client.CompleteChatStreamingAsync(messages, ToOpenAIOptions(options), cancellationToken);
+             
+             OpenAI.Chat.ChatTokenUsage? lastUsage = null;
+             
              await foreach (var update in updates)
              {
+                 // 捕获 Usage (通常在最后一个 chunk 中)
+                 if (update.Usage != null)
+                 {
+                     lastUsage = update.Usage;
+                 }
+                 
                  foreach (var part in update.ContentUpdate)
                  {
                      yield return new MEAI.ChatResponseUpdate(ToMEAIRole(update.Role), part.Text);
                  }
+             }
+             
+             // 在流结束时返回 Usage 信息
+             if (lastUsage != null)
+             {
+                 var usageDetails = new MEAI.UsageDetails
+                 {
+                     InputTokenCount = lastUsage.InputTokenCount,
+                     OutputTokenCount = lastUsage.OutputTokenCount,
+                     TotalTokenCount = lastUsage.TotalTokenCount
+                 };
+                 
+                 var usageUpdate = new MEAI.ChatResponseUpdate
+                 {
+                     Contents = [new MEAI.UsageContent(usageDetails)]
+                 };
+                 yield return usageUpdate;
              }
         }
         

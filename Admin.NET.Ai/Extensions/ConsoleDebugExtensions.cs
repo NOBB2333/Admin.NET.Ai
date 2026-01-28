@@ -48,7 +48,7 @@ public static class ConsoleDebugExtensions
         {
             switch (evt)
             {
-                case AgentRunUpdateEvent agentUpdate:
+                case AgentResponseUpdateEvent agentUpdate:
                     Console.Write(agentUpdate.Update.Text);
                     break;
                     

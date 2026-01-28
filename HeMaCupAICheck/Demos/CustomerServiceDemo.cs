@@ -89,7 +89,7 @@ public static class CustomerServiceDemo
                 var (intent, confidence) = intentClassifier(query);
                 var agent = agents[intent];
                 
-                Console.WriteLine($"🎯 意图: {intent} (置信度: {confidence:P0}) → 转接 {agent.Description}");
+                Console.WriteLine($"🎯 意图: {intent} (置信度: {confidence/100:P0}) → 转接 {agent.Description}");
 
                 // 调用对应 Agent (使用流式输出)
                 var prompt = $"{agent.SystemPrompt}\n\n客户问题: {query}\n请简洁专业地回答:";
@@ -112,7 +112,7 @@ public static class CustomerServiceDemo
                 var (intent, confidence) = intentClassifier(query);
                 var agent = agents[intent];
                 
-                Console.WriteLine($"🎯 意图: {intent} (置信度: {confidence:P0}) → 转接 {agent.Description}");
+                Console.WriteLine($"🎯 意图: {intent} (置信度: {confidence/100:P0}) → 转接 {agent.Description}");
                 Console.ForegroundColor = ConsoleColor.Green;
                 Console.WriteLine($"{agent.Emoji} (模拟回复...)");
                 Console.ResetColor();

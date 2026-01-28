@@ -26,7 +26,8 @@ builder.Services.AddSingleton<Microsoft.AspNetCore.Http.IHttpContextAccessor, Nu
 
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
-builder.Logging.SetMinimumLevel(LogLevel.Warning); // 减少杂音，只看关键输出
+// builder.Logging.SetMinimumLevel(LogLevel.Warning); // 减少杂音，只看关键输出
+builder.Logging.SetMinimumLevel(LogLevel.Information); // 显示 Token 监控等信息日志
 
 // 添加演示所需的日志 (已在上面配置，此处移除或保留注释)
 // builder.Services.AddLogging(...)09 
@@ -74,6 +75,7 @@ while (true)
     20. 多 Agent 文档审核 (Writer→Reviewer→Editor)
     21. 代码生成助手 (Structured Output)
     22. 客服智能分流 (意图识别+路由)
+    23. 内容安全过滤 (敏感词替换+PII脱敏)
     --------------------------------------------------
     0. 退出程序
     ==================================================");
@@ -109,6 +111,7 @@ while (true)
             case "20": await MultiAgentReviewDemo.RunAsync(sp); break;
             case "21": await CodeGeneratorDemo.RunAsync(sp); break;
             case "22": await CustomerServiceDemo.RunAsync(sp); break;
+            case "23": await ContentSafetyDemo.RunAsync(sp); break;
             case "99": 
                 {
                     // Reflection Inspector

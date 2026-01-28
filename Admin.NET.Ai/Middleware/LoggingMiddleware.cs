@@ -100,14 +100,14 @@ public class LoggingMiddleware : DelegatingChatClient
         }
         
         stopwatch.Stop();
-        _logger.LogInformation("⬅️ [Req:{RequestId}] 流式调用结束. 耗时: {Elapsed}ms. Chunks: {Count}", 
+        _logger.LogDebug("⬅️ [Req:{RequestId}] 流式调用结束. 耗时: {Elapsed}ms. Chunks: {Count}", 
             requestId, stopwatch.ElapsedMilliseconds, updateCount);
     }
 
     private void LogRequest(string requestId, string model, IEnumerable<ChatMessage> messages)
     {
         var userId = GetUserId();
-        _logger.LogInformation("➡️ [Req:{RequestId}] 用户: {UserId}, 模型: {Model}. PromptLength: {Length}", 
+        _logger.LogDebug("➡️ [Req:{RequestId}] 用户: {UserId}, 模型: {Model}. PromptLength: {Length}", 
             requestId, userId, model, messages.Sum(m => m.Text?.Length ?? 0));
 
         if (_enableSensitiveDataLogging)
@@ -121,7 +121,7 @@ public class LoggingMiddleware : DelegatingChatClient
         int inputTokens = (int)(response.Usage?.InputTokenCount ?? 0);
         int outputTokens = (int)(response.Usage?.OutputTokenCount ?? 0);
 
-        _logger.LogInformation("⬅️ [Req:{RequestId}] 完成. 耗时: {Elapsed}ms. Tokens: {In}+{Out}={Total}. Finish: {Reason}",
+        _logger.LogDebug("⬅️ [Req:{RequestId}] 完成. 耗时: {Elapsed}ms. Tokens: {In}+{Out}={Total}. Finish: {Reason}",
             requestId, 
             elapsed,
             inputTokens, 

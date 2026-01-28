@@ -33,7 +33,7 @@ public class WorkflowMonitor
         {
             switch (evt)
             {
-                case AgentRunUpdateEvent agentUpdate:
+                case AgentResponseUpdateEvent agentUpdate:
                     LogAgentProgress(workflowId, agentUpdate);
                     break;
                     
@@ -56,7 +56,7 @@ public class WorkflowMonitor
         }
     }
     
-    private void LogAgentProgress(string workflowId, AgentRunUpdateEvent update)
+    private void LogAgentProgress(string workflowId, AgentResponseUpdateEvent update)
     {
         using var activity = _telemetry.StartAgentActivity(update.ExecutorId, "Processing");
         

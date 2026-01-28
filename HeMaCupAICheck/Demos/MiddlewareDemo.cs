@@ -1,4 +1,5 @@
 using Admin.NET.Ai.Abstractions;
+using Admin.NET.Ai.Extensions;
 using Admin.NET.Ai.Middleware;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
@@ -39,17 +40,20 @@ public static class MiddlewareDemo
         // 演示缓存效果
         var question = "什么是机器学习？";
         Console.WriteLine($"第一次调用: {question}");
+        Console.ForegroundColor = ConsoleColor.Cyan;
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var response1 = await baseClient.GetResponseAsync(question);
+        await baseClient!.GetStreamingResponseAsync(question).WriteToConsoleAsync();
         sw.Stop();
-        Console.WriteLine($"响应时间: {sw.ElapsedMilliseconds}ms");
-        Console.WriteLine($"响应: {response1.Messages.LastOrDefault()?.Text?.Substring(0, Math.Min(100, response1.Messages.LastOrDefault()?.Text?.Length ?? 0))}...\n");
+        Console.ResetColor();
+        Console.WriteLine($"\n响应时间: {sw.ElapsedMilliseconds}ms\n");
 
         Console.WriteLine($"第二次调用 (相同问题 - 应命中缓存): {question}");
+        Console.ForegroundColor = ConsoleColor.Green;
         sw.Restart();
-        var response2 = await baseClient.GetResponseAsync(question);
+        await baseClient.GetStreamingResponseAsync(question).WriteToConsoleAsync();
         sw.Stop();
-        Console.WriteLine($"响应时间: {sw.ElapsedMilliseconds}ms (如果命中缓存会更快)");
+        Console.ResetColor();
+        Console.WriteLine($"\n响应时间: {sw.ElapsedMilliseconds}ms (如果命中缓存会更快)");
 
         // ===== 4. 限流中间件 =====
         Console.WriteLine("\n--- 4. 限流中间件 (RateLimitingMiddleware) ---");

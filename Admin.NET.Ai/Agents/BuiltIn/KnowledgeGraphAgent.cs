@@ -1,8 +1,8 @@
 using Admin.NET.Ai.Abstractions;
+using Admin.NET.Ai.Extensions;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using System.ComponentModel;
-using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Admin.NET.Ai.Agents.BuiltIn;
@@ -14,6 +14,7 @@ namespace Admin.NET.Ai.Agents.BuiltIn;
 public class KnowledgeGraphAgent
 {
     private readonly IChatClient _chatClient;
+    private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<KnowledgeGraphAgent> _logger;
     private readonly Dictionary<string, KnowledgeEntity> _entities = new();
     private readonly List<KnowledgeRelation> _relations = new();
@@ -31,11 +32,15 @@ public class KnowledgeGraphAgent
 
 关系示例: 工作于、位于、生产、参与、属于、创立、合作等
 
-请返回结构化JSON格式的抽取结果。";
+请严格按JSON格式返回抽取结果。";
 
-    public KnowledgeGraphAgent(IChatClient chatClient, ILogger<KnowledgeGraphAgent> logger)
+    public KnowledgeGraphAgent(
+        IChatClient chatClient, 
+        IServiceProvider serviceProvider,
+        ILogger<KnowledgeGraphAgent> logger)
     {
         _chatClient = chatClient;
+        _serviceProvider = serviceProvider;
         _logger = logger;
     }
 
@@ -47,36 +52,32 @@ public class KnowledgeGraphAgent
         [Description("待抽取的文本内容")] string text,
         CancellationToken ct = default)
     {
-        var messages = new List<ChatMessage>
-        {
-            new(ChatRole.System, SystemInstruction),
-            new(ChatRole.User, $"请从以下文本中抽取实体和关系:\n\n{text}")
-        };
-
         try
         {
-            var response = await _chatClient.GetResponseAsync(messages, new ChatOptions
+            // 使用 Builder 模式的结构化输出 API
+            var result = await _chatClient
+                .Structured()
+                .WithSystem(SystemInstruction)
+                .RunStructuredAsync<ExtractionResult>(
+                    $"请从以下文本中抽取实体和关系:\n\n{text}", 
+                    _serviceProvider);
+            
+            if (result != null)
             {
-                ResponseFormat = ChatResponseFormat.Json
-            }, ct);
+                // 更新内存图谱
+                foreach (var entity in result.Entities)
+                {
+                    _entities[entity.Name] = entity;
+                }
+                _relations.AddRange(result.Relations);
 
-            var json = response.Messages.LastOrDefault()?.Text ?? "{}";
-            var result = JsonSerializer.Deserialize<ExtractionResult>(json, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            }) ?? new ExtractionResult();
+                _logger.LogInformation("知识抽取完成: {Entities} 实体, {Relations} 关系",
+                    result.Entities.Count, result.Relations.Count);
 
-            // 更新内存图谱
-            foreach (var entity in result.Entities)
-            {
-                _entities[entity.Name] = entity;
+                return result;
             }
-            _relations.AddRange(result.Relations);
-
-            _logger.LogInformation("知识抽取完成: {Entities} 实体, {Relations} 关系",
-                result.Entities.Count, result.Relations.Count);
-
-            return result;
+            
+            return new ExtractionResult { Error = "解析结果为空" };
         }
         catch (Exception ex)
         {
@@ -219,7 +220,7 @@ public class KnowledgeEntity
     public string Type { get; set; } = "Concept";
 
     [JsonPropertyName("attributes")]
-    public Dictionary<string, object> Attributes { get; set; } = new();
+    public System.Text.Json.JsonElement? Attributes { get; set; }
 }
 
 public class KnowledgeRelation

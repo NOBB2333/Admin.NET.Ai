@@ -50,8 +50,16 @@ public sealed class OpenAIChatClientAdapter : IChatClient
         
         var updates = _client.CompleteChatStreamingAsync(messages, openAIOptions, cancellationToken);
         
+        OAI.ChatTokenUsage? lastUsage = null;
+        
         await foreach (var update in updates)
         {
+            // 捕获 Usage (通常在最后一个 chunk 中)
+            if (update.Usage != null)
+            {
+                lastUsage = update.Usage;
+            }
+            
             foreach (var part in update.ContentUpdate)
             {
                 if (!string.IsNullOrEmpty(part.Text))
@@ -59,6 +67,24 @@ public sealed class OpenAIChatClientAdapter : IChatClient
                     yield return new ChatResponseUpdate(ToMEAIRole(update.Role), part.Text);
                 }
             }
+        }
+        
+        // 在流结束时返回 Usage 信息
+        if (lastUsage != null)
+        {
+            var usageDetails = new UsageDetails
+            {
+                InputTokenCount = lastUsage.InputTokenCount,
+                OutputTokenCount = lastUsage.OutputTokenCount,
+                TotalTokenCount = lastUsage.TotalTokenCount
+            };
+            
+            // 创建包含 UsageContent 的 update
+            var usageUpdate = new ChatResponseUpdate
+            {
+                Contents = [new UsageContent(usageDetails)]
+            };
+            yield return usageUpdate;
         }
     }
 

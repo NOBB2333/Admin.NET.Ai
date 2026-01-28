@@ -15,7 +15,8 @@ public class TokenMonitoringMiddleware : DelegatingChatClient
     private readonly ILogger<TokenMonitoringMiddleware> _logger;
     private readonly ICostCalculator _costCalculator;
     private readonly IBudgetManager _budgetManager;
-    private readonly IHttpContextAccessor? _httpContextAccessor; // Now optional
+    private readonly IHttpContextAccessor? _httpContextAccessor;
+    private readonly string? _configuredModelName; // 构造时配置的模型名
 
     public TokenMonitoringMiddleware(
         IChatClient innerClient,
@@ -23,7 +24,8 @@ public class TokenMonitoringMiddleware : DelegatingChatClient
         ILogger<TokenMonitoringMiddleware> logger,
         ICostCalculator costCalculator,
         IBudgetManager budgetManager,
-        IHttpContextAccessor? httpContextAccessor = null) // Optional for console apps
+        IHttpContextAccessor? httpContextAccessor = null,
+        string? modelName = null) // 可选的模型名参数
         : base(innerClient)
     {
         _tokenStore = tokenStore;
@@ -31,29 +33,41 @@ public class TokenMonitoringMiddleware : DelegatingChatClient
         _costCalculator = costCalculator;
         _budgetManager = budgetManager;
         _httpContextAccessor = httpContextAccessor;
+        _configuredModelName = modelName;
     }
 
 
     public override async Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> chatMessages, ChatOptions? options = null, CancellationToken cancellationToken = default)
     {
+        var messagesList = chatMessages?.ToList() ?? [];
+        if (messagesList.Count == 0)
+        {
+            _logger.LogWarning("⚠️ TokenMonitoringMiddleware: 收到空消息列表，返回空响应");
+            return new ChatResponse([]);
+        }
+
         var userId = GetUserId();
-        var modelName = options?.ModelId ?? "unknown-model";
+        var modelName = options?.ModelId ?? _configuredModelName ?? "unknown-model";
         var requestId = Guid.NewGuid().ToString("N")[..8];
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         await CheckBudgetAsync(userId, modelName, requestId);
 
-        var tokenUsage = await RecordStartAsync(requestId, userId, modelName, chatMessages);
+        var tokenUsage = await RecordStartAsync(requestId, userId, modelName, messagesList);
 
         try
         {
             var response = await base.GetResponseAsync(chatMessages, options, cancellationToken);
+            stopwatch.Stop();
             
-            await RecordCompletionAsync(tokenUsage, chatMessages, response, modelName, requestId);
+            // 直接使用 response.Usage (MEAI 标准)
+            await RecordCompletionAsync(tokenUsage, response, modelName, requestId, stopwatch.ElapsedMilliseconds);
             
             return response;
         }
         catch (Exception ex)
         {
+            stopwatch.Stop();
             await RecordFailureAsync(tokenUsage, ex, requestId);
             throw;
         }
@@ -61,15 +75,22 @@ public class TokenMonitoringMiddleware : DelegatingChatClient
 
     public override async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(IEnumerable<ChatMessage> chatMessages, ChatOptions? options = null, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        var messagesList = chatMessages?.ToList() ?? [];
+        if (messagesList.Count == 0)
+        {
+            _logger.LogWarning("⚠️ TokenMonitoringMiddleware: 收到空消息列表，跳过处理");
+            yield break;
+        }
+
         var userId = GetUserId();
-        var modelName = options?.ModelId ?? "unknown-model";
+        var modelName = options?.ModelId ?? _configuredModelName ?? "unknown-model";
         var requestId = Guid.NewGuid().ToString("N")[..8];
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         await CheckBudgetAsync(userId, modelName, requestId);
 
         var tokenUsage = await RecordStartAsync(requestId, userId, modelName, chatMessages);
         
-        // 捕获流式异常
         IAsyncEnumerator<ChatResponseUpdate>? enumerator = null;
         try 
         {
@@ -77,17 +98,15 @@ public class TokenMonitoringMiddleware : DelegatingChatClient
         }
         catch (Exception ex)
         {
+             stopwatch.Stop();
              await RecordFailureAsync(tokenUsage, ex, requestId);
              throw;
         }
 
         await using (enumerator)
         {
-            // 用于收集完整响应以计算 Token
-            // 提示：某些 Provider 会在流结束时发送 Usage 字段，我们应该捕获它
-            // 如果没有，我们将拼接文本后估算
-            // 由于我们是 yield return，我们只能在最后更新 Token 记录
             var responseBuilder = new List<ChatResponseUpdate>();
+            UsageDetails? streamUsage = null;
             
             bool hasNext = true;
             while (hasNext)
@@ -98,19 +117,35 @@ public class TokenMonitoringMiddleware : DelegatingChatClient
                 }
                 catch (Exception ex)
                 {
+                    stopwatch.Stop();
                     await RecordFailureAsync(tokenUsage, ex, requestId);
                     throw;
                 }
 
                 if (hasNext)
                 {
-                    responseBuilder.Add(enumerator.Current);
-                    yield return enumerator.Current;
+                    var update = enumerator.Current;
+                    responseBuilder.Add(update);
+                    
+                    // 尝试从流式更新中获取 Usage (某些 Provider 在最后一个 update 中包含)
+                    if (update.Contents != null)
+                    {
+                        foreach (var content in update.Contents)
+                        {
+                            if (content is UsageContent usageContent)
+                            {
+                                streamUsage = usageContent.Details;
+                            }
+                        }
+                    }
+                    
+                    yield return update;
                 }
             }
             
-            // 流结束，计算 Token
-            await RecordStreamingCompletionAsync(tokenUsage, chatMessages, responseBuilder, modelName, requestId);
+            stopwatch.Stop();
+            // 流结束，记录 Token
+            await RecordStreamingCompletionAsync(tokenUsage, chatMessages, responseBuilder, streamUsage, modelName, requestId, stopwatch.ElapsedMilliseconds);
         }
     }
 
@@ -118,7 +153,6 @@ public class TokenMonitoringMiddleware : DelegatingChatClient
 
     private string GetUserId()
     {
-        // Support console apps where IHttpContextAccessor is not available
         if (_httpContextAccessor == null)
             return "console-user";
             
@@ -152,48 +186,92 @@ public class TokenMonitoringMiddleware : DelegatingChatClient
         };
 
         await _tokenStore.RecordStartAsync(tokenUsage);
-        _logger.LogInformation("📊 [Request-{RequestId}] 开始Token监控 - 用户: {UserId}, 模型: {Model}", requestId, userId, modelName);
+        _logger.LogDebug("📊 [Request-{RequestId}] 开始Token监控 - 用户: {UserId}, 模型: {Model}", requestId, userId, modelName);
         return tokenUsage;
     }
 
-    private async Task RecordCompletionAsync(TokenUsageRecord tokenUsage, IEnumerable<ChatMessage> requestMessages, ChatResponse response, string modelName, string requestId)
+    private async Task RecordCompletionAsync(TokenUsageRecord tokenUsage, ChatResponse response, string modelName, string requestId, long elapsedMs)
     {
-        var usage = await CalculateTokenUsageAsync(requestMessages, 
-            new ChatResponseTextWrapper(response.Messages.LastOrDefault(m => m.Role == ChatRole.Assistant)?.Text), 
-            null, modelName);
+        var responseText = response.Messages.LastOrDefault(m => m.Role == ChatRole.Assistant)?.Text;
+        
+        // 优先使用 API 返回的 Usage，否则估算
+        int inputTokens, outputTokens;
+        string source;
+        
+        if (response.Usage != null && (response.Usage.InputTokenCount > 0 || response.Usage.OutputTokenCount > 0))
+        {
+            inputTokens = (int)(response.Usage.InputTokenCount ?? 0);
+            outputTokens = (int)(response.Usage.OutputTokenCount ?? 0);
+            source = "API";
+        }
+        else
+        {
+            // Fallback: 估算 - 警告用户 API 未返回 Usage
+            inputTokens = EstimateTokens(tokenUsage.InputMessage ?? "");
+            outputTokens = EstimateTokens(responseText ?? "");
+            source = "估算";
+            _logger.LogDebug("⚠️ [Request-{RequestId}] API 未返回 Token 用量数据，使用估算 (模型: {Model})", requestId, modelName);
+        }
+        
+        var usage = new TokenUsage
+        {
+            PromptTokens = inputTokens,
+            CompletionTokens = outputTokens
+        };
             
-        await FinalizeRecordAsync(tokenUsage, usage, modelName, requestId, usage.ResponseText);
+        await FinalizeRecordAsync(tokenUsage, usage, modelName, requestId, responseText, source, elapsedMs);
     }
     
-    private async Task RecordStreamingCompletionAsync(TokenUsageRecord tokenUsage, IEnumerable<ChatMessage> requestMessages, List<ChatResponseUpdate> updates, string modelName, string requestId)
+    private async Task RecordStreamingCompletionAsync(
+        TokenUsageRecord tokenUsage, 
+        IEnumerable<ChatMessage> requestMessages, 
+        List<ChatResponseUpdate> updates, 
+        UsageDetails? streamUsage,
+        string modelName, 
+        string requestId,
+        long elapsedMs)
     {
-         // 尝试从 updates 中提取 Usage
-         // 目前 MEAI Preview 可能不支持直接从 Update 获取 Usage，或者放在最后一个 Update 中。
-         // 我们遍历寻找 Usage
-         // 假设暂时无法从 updates 获取 Usage，或者需要累加文本
-         var fullText = string.Join("", updates.Where(u => !string.IsNullOrEmpty(u.Text)).Select(u => u.Text));
-         
-         // 模拟 Usage 对象 (流式通常没有标准 Usage 对象 unless provided explicitly)
-         // 这里我们依赖估算
-         
-         var usage = await CalculateTokenUsageAsync(requestMessages, 
-             new ChatResponseTextWrapper(fullText), 
-             null, // 假设没有 Usage
-             modelName);
-             
-         await FinalizeRecordAsync(tokenUsage, usage, modelName, requestId, fullText);
+        var fullText = string.Join("", updates.Where(u => !string.IsNullOrEmpty(u.Text)).Select(u => u.Text));
+        
+        int inputTokens, outputTokens;
+        string source;
+        
+        // 优先使用流式返回的 Usage
+        if (streamUsage != null && (streamUsage.InputTokenCount > 0 || streamUsage.OutputTokenCount > 0))
+        {
+            inputTokens = (int)(streamUsage.InputTokenCount ?? 0);
+            outputTokens = (int)(streamUsage.OutputTokenCount ?? 0);
+            source = "API(Stream)";
+        }
+        else
+        {
+            // Fallback: 估算
+            var promptText = string.Join(" ", requestMessages.Select(m => m.Text));
+            inputTokens = EstimateTokens(promptText);
+            outputTokens = EstimateTokens(fullText);
+            source = "估算";
+            _logger.LogDebug("⚠️ [Request-{RequestId}] 流式 API 未返回 Token 用量数据，使用估算 (模型: {Model})", requestId, modelName);
+        }
+        
+        var usage = new TokenUsage
+        {
+            PromptTokens = inputTokens,
+            CompletionTokens = outputTokens
+        };
+              
+        await FinalizeRecordAsync(tokenUsage, usage, modelName, requestId, fullText, source, elapsedMs);
     }
 
-    private async Task FinalizeRecordAsync(TokenUsageRecord tokenUsage, TokenUsageResult usage, string modelName, string requestId, string? responseText)
+    private async Task FinalizeRecordAsync(TokenUsageRecord tokenUsage, TokenUsage usage, string modelName, string requestId, string? responseText, string source, long elapsedMs = 0)
     {
-        var cost = _costCalculator.CalculateCost(usage.UsageObj, modelName);
+        var cost = _costCalculator.CalculateCost(usage, modelName);
 
         tokenUsage.CompletionTime = DateTime.UtcNow;
-        tokenUsage.PromptTokens = usage.UsageObj.PromptTokens;
-        tokenUsage.CompletionTokens = usage.UsageObj.CompletionTokens;
+        tokenUsage.PromptTokens = usage.PromptTokens;
+        tokenUsage.CompletionTokens = usage.CompletionTokens;
         tokenUsage.Cost = cost;
         tokenUsage.Status = TokenUsageStatus.Completed;
-        tokenUsage.ResponseMessage = responseText?[..Math.Min(500, responseText.Length)]; 
+        tokenUsage.ResponseMessage = responseText?.Length > 500 ? responseText[..500] : responseText; 
 
         await _tokenStore.RecordCompletionAsync(tokenUsage);
 
@@ -204,8 +282,15 @@ public class TokenMonitoringMiddleware : DelegatingChatClient
                 requestId, tokenUsage.UserId, budgetStatus.UsagePercentage * 100);
         }
 
-        _logger.LogInformation("✅ [Request-{RequestId}] Token使用: 输入{PromptTokens}, 输出{CompletionTokens}, 总计{TotalTokens}, 费用: {Cost:C}", 
-            requestId, usage.UsageObj.PromptTokens, usage.UsageObj.CompletionTokens, usage.UsageObj.TotalTokens, cost);
+        // 增强输出：包含模型、用户、Token、耗时、费用
+        // 流式输出可能没有换行，确保日志在新行开始
+        if (source.Contains("Stream"))
+        {
+            Console.WriteLine(); // 确保流式输出后换行
+        }
+        _logger.LogInformation(
+            "✅ [{Model}] 用户:{User} | Token:{In}→{Out}({Source}) | 耗时:{Duration}ms | 费用:{Cost:C}", 
+            modelName, tokenUsage.UserId, usage.PromptTokens, usage.CompletionTokens, source, elapsedMs, cost);
     }
 
     private async Task RecordFailureAsync(TokenUsageRecord tokenUsage, Exception ex, string requestId)
@@ -218,61 +303,25 @@ public class TokenMonitoringMiddleware : DelegatingChatClient
         _logger.LogError(ex, "❌ [Request-{RequestId}] Token监控记录失败", requestId);
     }
 
-    private async Task<TokenUsageResult> CalculateTokenUsageAsync(IEnumerable<ChatMessage> requestMessages, ChatResponseTextWrapper responseText, AdditionalPropertiesDictionary? usageProps, string modelName)
-    {
-        // 尝试从 Usage 属性获取 (MEAI ChatResponse Usage is typically standard)
-        // Check if `usageProps` (passed as response.Usage which is `AdditionalPropertiesDictionary` in some versions or `UsageDetails` in others)
-        // Actually `ChatResponse` has `Usage` property of type `UsageDetails`? No, it's `AdditionalPropertiesDictionary` or dedicated type in newer versions.
-        // Step 257 code used `response.Usage.InputTokenCount`.
-        // Assume `usageProps` is accessible or passed correctly.
-        
-        // Wait, call site passed `response.Usage` which might be null.
-        
-        // If Usage is available
-        // Note: MEAI `ChatResponse.Usage` is `AI.Usage` type? Let's check imports.
-        // It seems `response.Usage` is not directly copyable to our internal `TokenUsage` class.
-        
-        int pRun = 0;
-        int cRun = 0;
-        
-        // 简化逻辑：如果有直接用，没有估算
-        // 这里只是演示，不再深究 MEAI 具体类型细节，假设 InputTokenCount 存在
-        // Step 257 showed `response.Usage.InputTokenCount`.
-        
-        // If usageProps is not null (casted or passed), use it.
-        // But `response.Usage` is not `AdditionalPropertiesDictionary`.
-        
-        // Let's refactor `CalculateTokenUsageAsync` signature to take `ChatResponseusage` object if possible.
-        // Or just use logic inline.
-        
-        // Simplified: return estimated if usage null.
-        
-        var promptText = string.Join(" ", requestMessages.Select(m => m.Text));
-        var completionText = responseText.Text ?? "";
-        
-        return new TokenUsageResult(
-            new TokenUsage
-            {
-                 PromptTokens = await EstimateTokensAsync(promptText, modelName),
-                 CompletionTokens = await EstimateTokensAsync(completionText, modelName)
-            }, 
-            completionText);
-    }
-
-    private class ChatResponseTextWrapper(string? text) { public string? Text => text; }
-    private record TokenUsageResult(TokenUsage UsageObj, string ResponseText);
-
-    private async Task<int> EstimateTokensAsync(string text, string modelName)
+    /// <summary>
+    /// 估算 Token 数量 (当 API 不返回 Usage 时使用)
+    /// </summary>
+    private static int EstimateTokens(string text)
     {
         if (string.IsNullOrEmpty(text)) return 0;
-        if (ContainChinese(text)) return (int)Math.Ceiling(text.Length * 1.2); 
+        
+        // 中文: 约 1.2 token/字符, 英文: 约 0.75 token/word (1.3 * words)
+        if (ContainsChinese(text))
+        {
+            return (int)Math.Ceiling(text.Length * 1.2);
+        }
+        
         var wordCount = text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
         return (int)Math.Ceiling(wordCount * 1.3);
     }
 
-    private bool ContainChinese(string text)
+    private static bool ContainsChinese(string text)
     {
         return System.Text.RegularExpressions.Regex.IsMatch(text, @"[\u4e00-\u9fa5]");
     }
 }
-

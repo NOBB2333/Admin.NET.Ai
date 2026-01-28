@@ -1,8 +1,8 @@
 using Admin.NET.Ai.Abstractions;
+using Admin.NET.Ai.Extensions;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using System.ComponentModel;
-using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Admin.NET.Ai.Agents.BuiltIn;
@@ -14,25 +14,30 @@ namespace Admin.NET.Ai.Agents.BuiltIn;
 public class QualityEvaluatorAgent
 {
     private readonly IChatClient _chatClient;
+    private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<QualityEvaluatorAgent> _logger;
 
     public const string SystemInstruction = @"你是一个专业的AI对话质量评估专家。
 你的任务是评估AI响应的质量，从多个维度进行打分和分析。
 
 评估维度 (0-10分):
-1. 相关性 (relevance): 响应是否切题
-2. 准确性 (accuracy): 信息是否正确
-3. 完整性 (completeness): 是否回答了全部问题
-4. 清晰度 (clarity): 表达是否清楚易懂
-5. 有用性 (helpfulness): 对用户是否有实际帮助
-6. 语气 (tone): 是否专业友好
-7. 综合评分 (overall): 整体质量评价
+1. relevance: 相关性 - 响应是否切题
+2. accuracy: 准确性 - 信息是否正确
+3. completeness: 完整性 - 是否回答了全部问题
+4. clarity: 清晰度 - 表达是否清楚易懂
+5. helpfulness: 有用性 - 对用户是否有实际帮助
+6. tone: 语气 - 是否专业友好
+7. overall: 综合评分 - 整体质量评价
 
-同时提供具体问题和改进建议。请返回结构化JSON格式结果。";
+同时提供具体问题(issues)和改进建议(suggestions)。请严格按JSON格式返回结果。";
 
-    public QualityEvaluatorAgent(IChatClient chatClient, ILogger<QualityEvaluatorAgent> logger)
+    public QualityEvaluatorAgent(
+        IChatClient chatClient, 
+        IServiceProvider serviceProvider,
+        ILogger<QualityEvaluatorAgent> logger)
     {
         _chatClient = chatClient;
+        _serviceProvider = serviceProvider;
         _logger = logger;
     }
 
@@ -46,37 +51,30 @@ public class QualityEvaluatorAgent
         [Description("对话上下文(可选)")] string? context = null,
         CancellationToken ct = default)
     {
-        var prompt = $@"请评估以下AI响应的质量:
+        try
+        {
+            // 使用 Builder 模式的结构化输出 API
+            var score = await _chatClient
+                .Structured()
+                .WithSystem(SystemInstruction)
+                .RunStructuredAsync<QualityScore>(
+                    $@"请评估以下AI响应的质量:
 
 用户问题: {userQuery}
 {(context != null ? $"上下文: {context}" : "")}
-AI响应: {aiResponse}";
-
-        var messages = new List<ChatMessage>
-        {
-            new(ChatRole.System, SystemInstruction),
-            new(ChatRole.User, prompt)
-        };
-
-        try
-        {
-            var response = await _chatClient.GetResponseAsync(messages, new ChatOptions
+AI响应: {aiResponse}", 
+                    _serviceProvider);
+            
+            if (score != null)
             {
-                ResponseFormat = ChatResponseFormat.Json
-            }, ct);
-
-            var json = response.Messages.LastOrDefault()?.Text ?? "{}";
-            var score = JsonSerializer.Deserialize<QualityScore>(json, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            }) ?? new QualityScore();
-
-            score.UserQuery = userQuery;
-            score.AiResponse = aiResponse;
-            score.EvaluatedAt = DateTime.UtcNow;
-
-            _logger.LogInformation("质量评估完成: 综合分 {Overall}/10", score.Overall);
-            return score;
+                score.UserQuery = userQuery;
+                score.AiResponse = aiResponse;
+                score.EvaluatedAt = DateTime.UtcNow;
+                _logger.LogInformation("质量评估完成: 综合分 {Overall}/10", score.Overall);
+                return score;
+            }
+            
+            return new QualityScore { UserQuery = userQuery, AiResponse = aiResponse, Error = "解析结果为空" };
         }
         catch (Exception ex)
         {

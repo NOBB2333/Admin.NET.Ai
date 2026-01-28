@@ -20,27 +20,52 @@ public static class AgentExtensions
     /// <returns>结构化结果</returns>
     public static async Task<T?> RunAsync<T>(this IChatClient client, string prompt, IServiceProvider serviceProvider, string provider = "Generic")
     {
+        return await RunAsync<T>(client, systemInstruction: null, userPrompt: prompt, serviceProvider, provider);
+    }
+    
+    /// <summary>
+    /// 运行 Agent 并返回结构化数据 (带 System 角色)
+    /// </summary>
+    /// <typeparam name="T">目标类型</typeparam>
+    /// <param name="client">ChatClient 实例</param>
+    /// <param name="systemInstruction">System 角色指令 (更高权重)</param>
+    /// <param name="userPrompt">用户提示</param>
+    /// <param name="serviceProvider">服务提供者</param>
+    /// <param name="provider">模型提供商</param>
+    /// <returns>结构化结果</returns>
+    public static async Task<T?> RunAsync<T>(
+        this IChatClient client, 
+        string? systemInstruction, 
+        string userPrompt, 
+        IServiceProvider serviceProvider, 
+        string provider = "Generic")
+    {
         var structuredService = serviceProvider.GetRequiredService<IStructuredOutputService>();
         
         // 1. 创建适配该类型的 Options (Schema 或 Prompt Injection)
         var options = structuredService.CreateOptions<T>(provider);
         
-        // 2. 发送请求
-        // 注意：如果是 DeepSeek/Qwen 等不支持原生 Schema 的模型，CreateOptions 可能会依赖调用方手动拼接 Schema 到 Prompt
-        // 这里我们做个简单的增强：如果 Options 是 JSON Mode 且没有原生 Schema 支持，我们手动把 Schema 拼接到 User Prompt 后面
-        // (注：StructuredOutputService 里的 CreateOptions 逻辑目前比较简单，我们在 Extensions 里做这个补充)
+        // 2. 构建消息列表
+        var messages = new List<ChatMessage>();
         
-        // 检查是否需要 Prompt 注入 (简单判断: JSON Mode 且不是 OpenAI)
+        // 添加 System 消息 (如果有)
+        if (!string.IsNullOrEmpty(systemInstruction))
+        {
+            messages.Add(new(ChatRole.System, systemInstruction));
+        }
+        
+        // 处理 JSON Schema 注入
+        var finalUserPrompt = userPrompt;
         if (options.ResponseFormat == ChatResponseFormat.Json && !provider.ToLower().Contains("openai") && !provider.ToLower().Contains("azure"))
         {
             var schema = structuredService.GenerateJsonSchema(typeof(T));
-            prompt += $"\n\n请严格按照以下 JSON 格式输出:\n```json\n{schema}\n```\n不要输出任何其他内容。";
+            finalUserPrompt += $"\n\n请严格按照以下 JSON 格式输出:\n```json\n{schema}\n```\n不要输出任何其他内容。";
         }
-
-        var messages = new List<ChatMessage> { new(ChatRole.User, prompt) };
+        
+        messages.Add(new(ChatRole.User, finalUserPrompt));
+        
         var response = await client.GetResponseAsync(messages, options);
 
-        // 3. 解析结果
         // 3. 解析结果
         var lastMessage = response.Messages?.LastOrDefault();
         if (lastMessage?.Text is null) return default;

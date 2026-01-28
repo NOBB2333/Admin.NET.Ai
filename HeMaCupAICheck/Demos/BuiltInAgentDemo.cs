@@ -24,7 +24,8 @@ public static class BuiltInAgentDemo
         // ===== 1. 情感分析 Agent =====
         Console.WriteLine("--- 1. 情感分析 Agent ---");
         var sentimentAgent = new SentimentAnalysisAgent(
-            chatClient,
+            chatClient!,
+            sp,
             loggerFactory.CreateLogger<SentimentAnalysisAgent>());
 
         var texts = new[]
@@ -38,7 +39,7 @@ public static class BuiltInAgentDemo
         {
             Console.WriteLine($"\n输入: {text}");
             var result = await sentimentAgent.AnalyzeAsync(text);
-            Console.WriteLine($"情感: {result.Sentiment} | 置信度: {result.Confidence:P0} | 强度: {result.Intensity}");
+            Console.WriteLine($"情感: {result.Sentiment} | 置信度: {result.Confidence/100:P0} | 强度: {result.Intensity}");
             if (result.Emotions.Any())
                 Console.WriteLine($"情绪: {string.Join(", ", result.Emotions)}");
         }
@@ -46,7 +47,8 @@ public static class BuiltInAgentDemo
         // ===== 2. 知识图谱 Agent =====
         Console.WriteLine("\n\n--- 2. 知识图谱 Agent ---");
         var kgAgent = new KnowledgeGraphAgent(
-            chatClient,
+            chatClient!,
+            sp,
             loggerFactory.CreateLogger<KnowledgeGraphAgent>());
 
         var document = @"
@@ -85,7 +87,8 @@ ABC科技公司的主要产品是智能客服系统。
         // ===== 3. 质量评估 Agent =====
         Console.WriteLine("\n\n--- 3. 质量评估 Agent ---");
         var qualityAgent = new QualityEvaluatorAgent(
-            chatClient,
+            chatClient!,
+            sp,
             loggerFactory.CreateLogger<QualityEvaluatorAgent>());
 
         var userQuery = "如何学习C#编程？";
@@ -97,6 +100,7 @@ ABC科技公司的主要产品是智能客服系统。
 4. **实践项目**: 做一个小型控制台应用或Web API
 
 推荐资源：Microsoft Learn、B站教程、《C# in Depth》";
+
 
         Console.WriteLine($"用户问题: {userQuery}");
         Console.WriteLine($"AI响应:\n{aiResponse}\n");

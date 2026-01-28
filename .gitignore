@@ -28,3 +28,12 @@ Thumbs.db
 # Build results
 [Tt]emp/
 [Ll]og/·
+
+
+# Other
+mise.toml
+Admin.NET.Ai/Configuration2
+Admin.NET.Ai/doc
+Admin.NET.Ai/doc-agent
+Admin.NET.Ai/doc-mcp
+Admin.NET.Ai/doc-workflow

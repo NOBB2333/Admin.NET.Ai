@@ -67,6 +67,23 @@ public class AgentBuilder : IChatClient
     }
 
     /// <summary>
+    /// 启用内容安全过滤 (敏感词过滤 + PII 脱敏)
+    /// </summary>
+    public AgentBuilder UseContentSafety()
+    {
+        var options = _serviceProvider.GetService(typeof(Microsoft.Extensions.Options.IOptions<Admin.NET.Ai.Options.ContentSafetyOptions>)) 
+            as Microsoft.Extensions.Options.IOptions<Admin.NET.Ai.Options.ContentSafetyOptions>;
+        var logger = _serviceProvider.GetService(typeof(ILogger<ContentSafetyMiddleware>)) 
+            as ILogger<ContentSafetyMiddleware>;
+        
+        if (options != null && logger != null)
+        {
+            _client = new ContentSafetyMiddleware(_client, options, logger);
+        }
+        return this;
+    }
+
+    /// <summary>
     /// 启用多模态视觉能力
     /// </summary>
     public AgentBuilder UseVision(bool enableImageGeneration = false)

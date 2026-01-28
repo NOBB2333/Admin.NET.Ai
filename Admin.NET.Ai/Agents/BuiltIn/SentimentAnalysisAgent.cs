@@ -1,8 +1,8 @@
 using Admin.NET.Ai.Abstractions;
+using Admin.NET.Ai.Extensions;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using System.ComponentModel;
-using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Admin.NET.Ai.Agents.BuiltIn;
@@ -14,22 +14,28 @@ namespace Admin.NET.Ai.Agents.BuiltIn;
 public class SentimentAnalysisAgent
 {
     private readonly IChatClient _chatClient;
+    private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<SentimentAnalysisAgent> _logger;
 
     public const string SystemInstruction = @"你是一个专业的情感分析专家。
 你的任务是分析输入文本的情感倾向、情绪类型和强度。
 
 分析维度:
-1. 情感极性: positive(正面), negative(负面), neutral(中性)
-2. 情绪类型: joy(喜悦), anger(愤怒), sadness(悲伤), fear(恐惧), surprise(惊讶), disgust(厌恶)
-3. 情感强度: low(低), medium(中), high(高)
-4. 关键情感词: 识别触发情感的关键词
+1. sentiment: 情感极性 - positive(正面), negative(负面), neutral(中性)
+2. emotions: 情绪类型 - joy(喜悦), anger(愤怒), sadness(悲伤), fear(恐惧), surprise(惊讶), disgust(厌恶)
+3. intensity: 情感强度 - low(低), medium(中), high(高)
+4. keywords: 关键情感词 - 识别触发情感的关键词
+5. confidence: 置信度 - 0-100 的数字表示分析信心
 
-请始终返回结构化的JSON格式结果。";
+请严格按JSON格式返回结果。";
 
-    public SentimentAnalysisAgent(IChatClient chatClient, ILogger<SentimentAnalysisAgent> logger)
+    public SentimentAnalysisAgent(
+        IChatClient chatClient, 
+        IServiceProvider serviceProvider,
+        ILogger<SentimentAnalysisAgent> logger)
     {
         _chatClient = chatClient;
+        _serviceProvider = serviceProvider;
         _logger = logger;
     }
 
@@ -41,30 +47,25 @@ public class SentimentAnalysisAgent
         [Description("待分析的文本内容")] string text,
         CancellationToken ct = default)
     {
-        var messages = new List<ChatMessage>
-        {
-            new(ChatRole.System, SystemInstruction),
-            new(ChatRole.User, $"请分析以下文本的情感:\n\n{text}")
-        };
-
         try
         {
-            var response = await _chatClient.GetResponseAsync(messages, new ChatOptions
+            // 使用 Builder 模式的结构化输出 API
+            var result = await _chatClient
+                .Structured()
+                .WithSystem(SystemInstruction)
+                .RunStructuredAsync<SentimentResult>(
+                    $"请分析以下文本的情感:\n\n{text}", 
+                    _serviceProvider);
+            
+            if (result != null)
             {
-                ResponseFormat = ChatResponseFormat.Json
-            }, ct);
-
-            var json = response.Messages.LastOrDefault()?.Text ?? "{}";
-            var result = JsonSerializer.Deserialize<SentimentResult>(json, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            }) ?? new SentimentResult();
-
-            result.OriginalText = text;
-            result.AnalyzedAt = DateTime.UtcNow;
-
-            _logger.LogDebug("情感分析完成: {Sentiment} ({Confidence:P0})", result.Sentiment, result.Confidence);
-            return result;
+                result.OriginalText = text;
+                result.AnalyzedAt = DateTime.UtcNow;
+                _logger.LogDebug("情感分析完成: {Sentiment} ({Confidence}%)", result.Sentiment, result.Confidence);
+                return result;
+            }
+            
+            return new SentimentResult { OriginalText = text, Sentiment = "unknown", Error = "解析结果为空" };
         }
         catch (Exception ex)
         {

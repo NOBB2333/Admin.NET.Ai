@@ -78,6 +78,7 @@ public static class ServiceCollectionInit
         services.Configure<Admin.NET.Ai.Options.LLMDocumentConfig>(configuration.GetSection("LLM-Document"));
         services.Configure<Admin.NET.Ai.Options.LLMCostControlConfig>(configuration.GetSection("LLM-CostControl"));
         services.Configure<Admin.NET.Ai.Options.LLMCapabilitiesConfig>(configuration.GetSection("LLM-Capabilities"));
+        services.Configure<Admin.NET.Ai.Options.ContentSafetyOptions>(configuration.GetSection("ContentSafety"));
         services.Configure<Admin.NET.Ai.Options.LLMPersistenceConfig>(configuration.GetSection("LLM-Persistence"));
         
         // 0.2 兼容性绑定: 将 LLMAgentOptions 绑定到根配置，以支持尚未重构的服务

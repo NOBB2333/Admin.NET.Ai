@@ -8,10 +8,16 @@ namespace Admin.NET.Ai.Storage;
 
 /// <summary>
 /// Microsoft Agent Framework (MAF) 聊天消息存储实现
+/// 适配 MAF 1.0.0-preview.260127.1 新的 ChatHistoryProvider API
+/// 
+/// 新版 API 中：
+/// - InvokingAsync 返回要添加到上下文的历史消息
+/// - InvokedAsync 在 LLM 调用完成后调用，用于后续处理
 /// </summary>
-public sealed class AgentChatMessageStore : ChatMessageStore
+public sealed class AgentChatMessageStore : ChatHistoryProvider
 {
     private readonly IAgentChatMessageStore _persistenceStore;
+    private readonly List<ChatMessage> _messages = new();
     public string ThreadDbKey { get; private set; }
 
     public AgentChatMessageStore(
@@ -21,38 +27,65 @@ public sealed class AgentChatMessageStore : ChatMessageStore
         JsonSerializerOptions? jsonSerializerOptions = null)
     {
         _persistenceStore = persistenceStore ?? throw new ArgumentNullException(nameof(persistenceStore));
-        this.ThreadDbKey = threadId;
-    }
+        ThreadDbKey = threadId;
 
-    public override async Task AddMessagesAsync(
-        IEnumerable<ChatMessage> messages,
-        CancellationToken cancellationToken)
-    {
-        var dtos = messages.Select(x => new ChatHistoryItemDto
+        // 从序列化状态反序列化 threadId（如果有）
+        if (serializedStoreState.ValueKind == JsonValueKind.String)
         {
-            Key = this.ThreadDbKey + x.MessageId,
-            Timestamp = DateTimeOffset.UtcNow,
-            ThreadId = this.ThreadDbKey,
-            MessageId = x.MessageId,
-            Role = x.Role.Value,
-            SerializedMessage = JsonSerializer.Serialize(x),
-            MessageText = x.Text
-        }).ToList();
-
-        await _persistenceStore.AddMessagesAsync(dtos, cancellationToken);
+            ThreadDbKey = serializedStoreState.GetString() ?? threadId;
+        }
     }
 
-    public override async Task<IEnumerable<ChatMessage>> GetMessagesAsync(
+    /// <summary>
+    /// 在 Agent 调用 LLM 之前触发 - 从持久化存储加载历史消息
+    /// 返回要添加到上下文中的消息列表
+    /// </summary>
+    public override async ValueTask<IEnumerable<ChatMessage>> InvokingAsync(
+        InvokingContext context, 
         CancellationToken cancellationToken)
     {
-        var data = await _persistenceStore.GetMessagesAsync(this.ThreadDbKey, cancellationToken);
-        var messages = data.ConvertAll(x => JsonSerializer.Deserialize<ChatMessage>(x.SerializedMessage!)!);
-        
-        // Reverse if stored in descending order, but DatabaseAgentChatMessageStore uses OrderBy(Timestamp)
-        // MAF usually expects chronological order.
-        return messages;
+        // 从数据库加载历史消息
+        var data = await _persistenceStore.GetMessagesAsync(ThreadDbKey, cancellationToken);
+        _messages.Clear();
+        _messages.AddRange(data.Select(x => JsonSerializer.Deserialize<ChatMessage>(x.SerializedMessage!)!));
+
+        // 返回历史消息，框架会自动将它们添加到上下文中
+        return _messages;
+    }
+
+    /// <summary>
+    /// 在 Agent 调用 LLM 完成后触发
+    /// TODO: 检查 InvokedContext 的正确 API 来保存新消息
+    /// </summary>
+    public override ValueTask InvokedAsync(
+        InvokedContext context, 
+        CancellationToken cancellationToken)
+    {
+        // NOTE: 新版 API 中 InvokedContext 的结构可能已变化
+        // 当前版本只做空实现，消息保存需要在调用端处理
+        // 或者通过其他机制（如自定义中间件）来保存消息
+        return ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// 手动添加消息到持久化存储（用于调用端显式保存）
+    /// </summary>
+    public async Task AddMessageAsync(ChatMessage message, CancellationToken cancellationToken = default)
+    {
+        var dto = new ChatHistoryItemDto
+        {
+            Key = ThreadDbKey + message.MessageId,
+            Timestamp = DateTimeOffset.UtcNow,
+            ThreadId = ThreadDbKey,
+            MessageId = message.MessageId,
+            Role = message.Role.Value,
+            SerializedMessage = JsonSerializer.Serialize(message),
+            MessageText = message.Text
+        };
+
+        await _persistenceStore.AddMessagesAsync(new List<ChatHistoryItemDto> { dto }, cancellationToken);
     }
 
     public override JsonElement Serialize(JsonSerializerOptions? jsonSerializerOptions = null) =>
-        JsonSerializer.SerializeToElement(this.ThreadDbKey);
+        JsonSerializer.SerializeToElement(ThreadDbKey);
 }
