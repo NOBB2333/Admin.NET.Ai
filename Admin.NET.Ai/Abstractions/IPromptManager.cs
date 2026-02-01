@@ -1,4 +1,6 @@
-namespace Admin.NET.Ai.Services.Prompt;
+using Admin.NET.Ai.Services.Prompt;
+
+namespace Admin.NET.Ai.Abstractions;
 
 /// <summary>
 /// 提示词管理接口

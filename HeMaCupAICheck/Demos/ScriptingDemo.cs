@@ -1,4 +1,5 @@
 using Admin.NET.Ai.Services.Workflow;
+using Admin.NET.Ai.Models.Workflow;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace HeMaCupAICheck.Demos;
@@ -10,7 +11,6 @@ public static class ScriptingDemo
         Console.WriteLine("\n=== [5] Natasha 动态脚本热重载演示 ===");
         var scriptEngine = sp.GetRequiredService<NatashaScriptEngine>();
 
-        // 从文件加载脚本
         // 从目录加载所有脚本文件
         var scriptDir = Path.Combine(AppContext.BaseDirectory, "Demos/NatashaHotReloadScript");
         if (!Directory.Exists(scriptDir))
@@ -35,24 +35,24 @@ public static class ScriptingDemo
         Console.WriteLine($"正在动态编译 {scripts.Count} 个脚本并载入隔离域...");
         try 
         {
-            var executors = scriptEngine.LoadScripts(scripts); // LoadScripts expects IEnumerable<string>
+            var executors = scriptEngine.LoadScripts(scripts);
             
             foreach (var executor in executors)
             {
                 var meta = executor.GetMetadata();
                 Console.WriteLine($"\n✅ 脚本载入成功: {meta.Name} (v{meta.Version})");
                 
-                // 创建执行上下文
-                var context = new Admin.NET.Ai.Models.Workflow.ScriptExecutionContext(meta.Name);
+                // 创建追踪上下文
+                var trace = new ScriptExecutionContext(meta.Name);
                 
-                var input = new Dictionary<string, object?> { { "name", "HeMaCupUser" } };
-                var result = executor.Execute(input, context);
+                var args = new Dictionary<string, object?> { { "name", "HeMaCupUser" } };
+                var result = await executor.ExecuteAsync(args, trace);
                 
                 Console.WriteLine($"执行结果: {result}");
                 
                 // 打印追踪信息
                 Console.WriteLine("\n--- [脚本执行轨迹 (零侵入注入)] ---");
-                PrintStep(context.RootStep, 0);
+                PrintStep(trace.RootStep, 0);
             }
 
             if (executors.Any())

@@ -22,15 +22,15 @@ public class ToolManager(IServiceProvider serviceProvider, ILogger<ToolManager> 
         // 这里默认扫描 Admin.NET.Ai 所在的程序集，也可以扩展扫描 AppDomain
         var assembly = Assembly.GetExecutingAssembly();
         var toolTypes = assembly.GetTypes()
-            .Where(t => typeof(IAiCallAbleFunction).IsAssignableFrom(t) && t.IsClass && !t.IsAbstract);
+            .Where(t => typeof(IAiCallableFunction).IsAssignableFrom(t) && t.IsClass && !t.IsAbstract);
 
         foreach (var type in toolTypes)
         {
-            IAiCallAbleFunction? tool = null;
+            IAiCallableFunction? tool = null;
             try
             {
                 // 2. 使用 ActivatorUtilities 创建实例，支持依赖注入
-                tool = ActivatorUtilities.CreateInstance(serviceProvider, type) as IAiCallAbleFunction;
+                tool = ActivatorUtilities.CreateInstance(serviceProvider, type) as IAiCallableFunction;
             }
             catch (Exception ex)
             {

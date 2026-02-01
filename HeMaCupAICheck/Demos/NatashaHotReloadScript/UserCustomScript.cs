@@ -1,12 +1,20 @@
 using Admin.NET.Ai.Abstractions;
+using Admin.NET.Ai.Models.Workflow;
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 
 public class MyDynamicExecutor : IScriptExecutor
 {
-    public object? Execute(Dictionary<string, object?>? input, IScriptExecutionContext? context = null)
+    public async Task<object?> ExecuteAsync(
+        IDictionary<string, object?> args, 
+        IScriptExecutionContext? trace = null, 
+        CancellationToken ct = default)
     {
-        string name = input?.GetValueOrDefault("name")?.ToString() ?? "Guest";
+        string name = args != null && args.TryGetValue("name", out var val) ? val?.ToString() ?? "Guest" : "Guest";
+        
+        await Task.CompletedTask;
         
         // 模拟调用内部方法，看是否能被自动追踪
         var greeting = GetGreeting(name);

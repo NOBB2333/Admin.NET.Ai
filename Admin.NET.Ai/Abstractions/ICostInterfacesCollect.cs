@@ -1,19 +1,33 @@
-using Admin.NET.Ai.Middleware; // For models like TokenUsage
+// For models like TokenUsage
+using Admin.NET.Ai.Middleware; 
 
+// 这个里面的接口主要是做“每天”的用量管理和“总共”的用量管理以及预算管理，每天预算管理等等一些细分设置。
 namespace Admin.NET.Ai.Abstractions;
 
+/// <summary> 费用计算 </summary>
 public interface ICostCalculator
 {
     decimal CalculateCost(TokenUsage usage, string modelName);
 }
 
-public interface IBudgetManager
+/// <summary>
+/// 成本存储接口
+/// </summary>
+public interface ICostStore
 {
-    Task<BudgetCheckResult> CheckBudgetAsync(string userId, string modelName);
-    Task<BudgetStatus> GetBudgetStatusAsync(string userId, string modelName);
-    Task RecordUsageAsync(string userId, string modelName, decimal amount);
+    /// <summary>
+    /// 保存成本记录
+    /// </summary>
+    /// <param name="requestId">请求ID</param>
+    /// <param name="inputTokens">输入Token</param>
+    /// <param name="outputTokens">输出Token</param>
+    /// <param name="model">模型名称</param>
+    /// <param name="additionalData">其他数据</param>
+    /// <returns></returns>
+    Task SaveCostAsync(string requestId, int inputTokens, int outputTokens, string model, IDictionary<string, object?>? additionalData = null);
 }
 
+/// <summary> Token使用存储 </summary>
 public interface ITokenUsageStore
 {
     Task RecordStartAsync(TokenUsageRecord record);
@@ -21,6 +35,15 @@ public interface ITokenUsageStore
     Task<List<TokenUsageRecord>> GetUserUsageAsync(string userId, DateTime? start, DateTime? end);
 }
 
+/// <summary> 预算管理 </summary>
+public interface IBudgetManager
+{
+    Task<BudgetCheckResult> CheckBudgetAsync(string userId, string modelName);
+    Task<BudgetStatus> GetBudgetStatusAsync(string userId, string modelName);
+    Task RecordUsageAsync(string userId, string modelName, decimal amount);
+}
+
+/// <summary> 预算存储 </summary>
 public interface IBudgetStore
 {
     Task<UserBudget?> GetUserBudgetAsync(string userId, string modelName);

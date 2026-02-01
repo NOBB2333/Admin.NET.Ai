@@ -1,6 +1,4 @@
-using Admin.NET.Ai.Abstractions;
-
-namespace Admin.NET.Ai.Services.Rag;
+namespace Admin.NET.Ai.Abstractions;
 
 /// <summary>
 /// RAG 服务接口 (Generic)

@@ -7,7 +7,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Furion.Pure" Version="4.9.8.7" />
+        <PackageReference Include="Furion.Pure" Version="4.9.8.10" />
 
         <!--  AI 部分 -->
         <PackageReference Include="Microsoft.Agents.AI" Version="1.0.0-preview.260127.1" />

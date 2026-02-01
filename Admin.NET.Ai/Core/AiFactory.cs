@@ -280,7 +280,12 @@ public class AiFactory : IAiFactory
             config.BaseUrl ?? "api.openai.com", 
             config.ModelId);
         
-        return new OpenAIChatClientAdapter(client.GetChatClient(config.ModelId));
+        // 1. 获取官方 IChatClient (MEAI 标准实现)
+        var innerClient = new OpenAIChatClientAdapter(client.GetChatClient(config.ModelId), config.ModelId);
+
+        // 2. 挂载图片下载中间件 (替代 OpenAIChatClientAdapter 的功能)
+        // 自动下载 HTTP 图片并转换为 DataContent，支持内网/代理场景
+        return ActivatorUtilities.CreateInstance<Core.Adapters.UriImageAdapter>(_serviceProvider, innerClient);
     }
     
     /// <summary>
@@ -324,167 +329,7 @@ public class AiFactory : IAiFactory
     /// 私有适配器，用于将 OpenAI.Chat.ChatClient 连接到 Microsoft.Extensions.AI.IChatClient
     /// 绕过预览包中缺失的扩展。
     /// </summary>
-    private class PrivateOpenAIAdapter(OpenAI.Chat.ChatClient client) : MEAI.IChatClient
-    {
-        public MEAI.ChatClientMetadata Metadata => new(nameof(PrivateOpenAIAdapter));
 
-        public object? GetService(Type serviceType, object? key = null)
-        {
-            return serviceType.IsInstanceOfType(client) ? client : null;
-        }
-
-        public async Task<MEAI.ChatResponse> GetResponseAsync(IEnumerable<MEAI.ChatMessage> chatMessages, MEAI.ChatOptions? options = null, CancellationToken cancellationToken = default)
-        {
-            var messages = await ToOpenAIMessagesAsync(chatMessages, cancellationToken);
-            OpenAI.Chat.ChatCompletion completion = await client.CompleteChatAsync(messages, ToOpenAIOptions(options), cancellationToken);
-            return ToMEAIResponse(completion);
-        }
-
-        public async IAsyncEnumerable<MEAI.ChatResponseUpdate> GetStreamingResponseAsync(IEnumerable<MEAI.ChatMessage> chatMessages, MEAI.ChatOptions? options = null, [EnumeratorCancellation] CancellationToken cancellationToken = default)
-        {
-             var messages = await ToOpenAIMessagesAsync(chatMessages, cancellationToken);
-             var updates = client.CompleteChatStreamingAsync(messages, ToOpenAIOptions(options), cancellationToken);
-             
-             OpenAI.Chat.ChatTokenUsage? lastUsage = null;
-             
-             await foreach (var update in updates)
-             {
-                 // 捕获 Usage (通常在最后一个 chunk 中)
-                 if (update.Usage != null)
-                 {
-                     lastUsage = update.Usage;
-                 }
-                 
-                 foreach (var part in update.ContentUpdate)
-                 {
-                     yield return new MEAI.ChatResponseUpdate(ToMEAIRole(update.Role), part.Text);
-                 }
-             }
-             
-             // 在流结束时返回 Usage 信息
-             if (lastUsage != null)
-             {
-                 var usageDetails = new MEAI.UsageDetails
-                 {
-                     InputTokenCount = lastUsage.InputTokenCount,
-                     OutputTokenCount = lastUsage.OutputTokenCount,
-                     TotalTokenCount = lastUsage.TotalTokenCount
-                 };
-                 
-                 var usageUpdate = new MEAI.ChatResponseUpdate
-                 {
-                     Contents = [new MEAI.UsageContent(usageDetails)]
-                 };
-                 yield return usageUpdate;
-             }
-        }
-        
-        private async Task<IEnumerable<OpenAI.Chat.ChatMessage>> ToOpenAIMessagesAsync(IEnumerable<MEAI.ChatMessage> messages, CancellationToken ct)
-        {
-            var result = new List<OpenAI.Chat.ChatMessage>();
-            // 在此适配器范围内为简单起见使用瞬态 HttpClient，或者最好注入它。
-            // 考虑到范围，对于此逻辑修复，每个请求一个新的客户端是可以接受的，但重用会更好。
-            using var httpClient = new HttpClient();
-            // Add User-Agent to avoid 403 Forbidden from sites like Wikimedia
-            httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
-
-            foreach(var m in messages)
-            {
-                if (m.Role == MEAI.ChatRole.User)
-                {
-                    if (m.Contents != null && m.Contents.Count > 0)
-                    {
-                        var parts = new List<OpenAI.Chat.ChatMessageContentPart>();
-                        foreach(var content in m.Contents)
-                        {
-                            if (content is MEAI.TextContent tc)
-                            {
-                                parts.Add(OpenAI.Chat.ChatMessageContentPart.CreateTextPart(tc.Text));
-                            }
-                            else if (content is MEAI.DataContent dc)
-                            {
-                                 parts.Add(OpenAI.Chat.ChatMessageContentPart.CreateImagePart(BinaryData.FromBytes(dc.Data.ToArray()), dc.MediaType));
-                            }
-                            else if (content is MEAI.UriContent uc)
-                            {
-                                 if (uc.Uri.IsFile)
-                                 {
-                                     // 智能处理：读取本地文件
-                                     var bytes = await File.ReadAllBytesAsync(uc.Uri.LocalPath, ct); 
-                                     string mediaType = "image/png"; 
-                                     if (uc.Uri.LocalPath.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) || uc.Uri.LocalPath.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase)) 
-                                        mediaType = "image/jpeg";
-                                     else if (uc.Uri.LocalPath.EndsWith(".webp", StringComparison.OrdinalIgnoreCase))
-                                        mediaType = "image/webp";
-                                     
-                                     parts.Add(OpenAI.Chat.ChatMessageContentPart.CreateImagePart(BinaryData.FromBytes(bytes), mediaType));
-                                 }
-                                 else if (uc.Uri.Scheme.StartsWith("http", StringComparison.OrdinalIgnoreCase))
-                                 {
-                                     // 智能处理：下载远程文件以绕过供应商访问问题
-                                     try 
-                                     {
-                                         var bytes = await httpClient.GetByteArrayAsync(uc.Uri, ct);
-                                         string mediaType = "image/jpeg"; // 默认
-                                         if (uc.Uri.AbsoluteUri.EndsWith(".png", StringComparison.OrdinalIgnoreCase)) mediaType = "image/png";
-                                         else if (uc.Uri.AbsoluteUri.EndsWith(".webp", StringComparison.OrdinalIgnoreCase)) mediaType = "image/webp";
-                                         else if (uc.Uri.AbsoluteUri.EndsWith(".gif", StringComparison.OrdinalIgnoreCase)) mediaType = "image/gif";
-                                         
-                                         parts.Add(OpenAI.Chat.ChatMessageContentPart.CreateImagePart(BinaryData.FromBytes(bytes), mediaType));
-                                     }
-                                     catch (Exception ex)
-                                     {
-                                         Console.WriteLine($"[AiFactory] Network Image Download Failed: {ex.Message}. Fallback to passing URI.");
-                                         parts.Add(OpenAI.Chat.ChatMessageContentPart.CreateImagePart(uc.Uri));
-                                     }
-                                 }
-                                 else
-                                 {
-                                     parts.Add(OpenAI.Chat.ChatMessageContentPart.CreateImagePart(uc.Uri));
-                                 }
-                            }
-                        }
-                        result.Add(new OpenAI.Chat.UserChatMessage(parts));
-                    }
-                    else 
-                    {
-                        result.Add(new OpenAI.Chat.UserChatMessage(m.Text));
-                    }
-                }
-                else if (m.Role == MEAI.ChatRole.System) result.Add(new OpenAI.Chat.SystemChatMessage(m.Text));
-                else if (m.Role == MEAI.ChatRole.Assistant) result.Add(new OpenAI.Chat.AssistantChatMessage(m.Text));
-                else result.Add(new OpenAI.Chat.UserChatMessage(m.Text));
-            }
-            return result;
-        }
-        
-        private OpenAI.Chat.ChatCompletionOptions ToOpenAIOptions(MEAI.ChatOptions? options)
-        {
-            if (options == null) return new();
-            return new OpenAI.Chat.ChatCompletionOptions 
-            {
-                 Temperature = options.Temperature,
-                 TopP = options.TopP,
-                 MaxOutputTokenCount = options.MaxOutputTokens,
-            };
-        }
-
-        private MEAI.ChatResponse ToMEAIResponse(OpenAI.Chat.ChatCompletion completion)
-        {
-            var content = completion.Content?.Count > 0 ? completion.Content[0].Text : string.Empty;
-            return new MEAI.ChatResponse(new MEAI.ChatMessage(MEAI.ChatRole.Assistant, content));
-        }
-        
-        private MEAI.ChatRole ToMEAIRole(OpenAI.Chat.ChatMessageRole? role)
-        {
-            if (!role.HasValue) return MEAI.ChatRole.Assistant;
-            if (role == OpenAI.Chat.ChatMessageRole.User) return MEAI.ChatRole.User;
-            if (role == OpenAI.Chat.ChatMessageRole.System) return MEAI.ChatRole.System;
-            return MEAI.ChatRole.Assistant;
-        }
-
-        public void Dispose() { }
-    }
     private IChatClient CreateGenericClient(LLMClientConfig config)
     {
         // 通用 OpenAI 兼容 (DeepSeek 等)
@@ -498,7 +343,8 @@ public class AiFactory : IAiFactory
         var credential = new ApiKeyCredential(config.ApiKey);
         var openAIClient = new OpenAIClient(credential, openAIClientOptions);
         
-        return new PrivateOpenAIAdapter(openAIClient.GetChatClient(config.ModelId));
+        var innerClient = new OpenAIChatClientAdapter(openAIClient.GetChatClient(config.ModelId), config.ModelId);
+        return ActivatorUtilities.CreateInstance<Core.Adapters.UriImageAdapter>(_serviceProvider, innerClient);
     }
 
     public TAgent? CreateAgent<TAgent>(string clientName, string agentName, string? instructions = null) where TAgent : class
@@ -533,22 +379,34 @@ public class AiFactory : IAiFactory
                     
                      // 1. 设置 ChatClient (MEAI) - 如果通过构造函数传递则是多余的，但是是安全的
                      // 使用 SetAgentProperty 助手以避免只读异常
+                     // 1. 设置 ChatClient (MEAI) - 如果通过构造函数传递则是多余的，但是是安全的
+                     // 使用 SetAgentProperty 助手以避免只读异常
+                     /* (Removed Reflection)
                      var clientPropName = (type.GetProperty("ChatClient") != null) ? "ChatClient" : "Client";
                      SetAgentProperty(agent, clientPropName, client);
+                     */
                     
-                     // 2. 设置名称 (动态代理名称)
-                     SetAgentProperty(agent, "Name", agentName);
-                     
-                     // 3. 设置指令 (角色)
-                     if (!string.IsNullOrEmpty(instructions))
+                     // 2. 设置名称和指令 (显式属性赋值)
+                     if (agent is Admin.NET.Ai.Agents.BuiltIn.SentimentAnalysisAgent sentimentAgent)
                      {
-                         SetAgentProperty(agent, "Instructions", instructions);
-                         SetAgentProperty(agent, "Description", instructions);
+                         sentimentAgent.Name = agentName;
+                         if (!string.IsNullOrEmpty(instructions))
+                         {
+                             sentimentAgent.Instructions = instructions;
+                         }
                      }
+                     // 对于 Microsoft.Agents.AI.ChatClientAgent
+                     else if (agent is Microsoft.Agents.AI.ChatClientAgent maAgent)
+                     {
+                         // MAF Agent 通常有 Name 属性
+                         // maAgent.Name = agentName; 
+                     }
+                     
+                     return agent;
+                  }
  
                      return agent;
                   }
-              }
               catch (Exception ex)
               {
                   Console.WriteLine($"Error creating agent '{agentName}' with client '{clientName}': {ex.Message}");
@@ -558,32 +416,7 @@ public class AiFactory : IAiFactory
           return default; 
      }
  
-     private void SetAgentProperty(object agent, string propertyName, object value)
-     {
-         var type = agent.GetType();
-         // 尝试通过属性设置 (Public/Private Setter)
-         try 
-         {
-             var prop = type.GetProperty(propertyName);
-             if (prop != null && prop.CanWrite)
-             {
-                 prop.SetValue(agent, value);
-                 return;
-             }
-         }
-         catch { } // 忽略属性设置失败，假定为只读或错误
 
-         // 回退：直接设置支持字段 (反射)
-         try
-         {
-             var field = type.GetField($"<{propertyName}>k__BackingField", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-             if (field != null)
-             {
-                 field.SetValue(agent, value);
-             }
-         }
-         catch { } // 忽略字段设置失败
-     }
  
 
     public TAgent? CreateDefaultAgent<TAgent>(string agentName, string? instructions = null) where TAgent : class

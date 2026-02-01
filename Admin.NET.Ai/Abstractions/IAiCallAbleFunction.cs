@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using Microsoft.Extensions.AI;
 
 namespace Admin.NET.Ai.Abstractions;
@@ -6,7 +5,7 @@ namespace Admin.NET.Ai.Abstractions;
 /// <summary>
 /// AI 工具接口 (用于自动发现和注册 Function Calling)
 /// </summary>
-public interface IAiCallAbleFunction
+public interface IAiCallableFunction
 {
     /// <summary>
     /// 工具名称 (唯一标识)

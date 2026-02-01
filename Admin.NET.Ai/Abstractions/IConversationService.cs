@@ -1,8 +1,6 @@
-using Admin.NET.Ai.Abstractions;
 using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.ChatCompletion;
 
-namespace Admin.NET.Ai.Services.Conversation;
+namespace Admin.NET.Ai.Abstractions;
 
 /// <summary>
 /// 会话管理服务接口（五星级企业标准）

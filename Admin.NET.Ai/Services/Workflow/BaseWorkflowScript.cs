@@ -1,6 +1,5 @@
 using Admin.NET.Ai.Abstractions;
 using Admin.NET.Ai.Models.Workflow;
-using System.Collections.Generic;
 
 namespace Admin.NET.Ai.Services.Workflow;
 
@@ -9,11 +8,27 @@ namespace Admin.NET.Ai.Services.Workflow;
 /// </summary>
 public abstract class BaseWorkflowScript : IScriptExecutor
 {
-    // 该字段会被 ScriptSourceRewriter 自动注入的值覆盖（如果存在重名的注入，则使用注入的）
-    // 为了兼容性，我们定义一个可供子类使用的受保护属性
-    protected IScriptExecutionContext? Context => (this as dynamic)._scriptContext;
+    /// <summary>
+    /// 追踪上下文，在 ExecuteAsync 调用时被设置
+    /// </summary>
+    protected IScriptExecutionContext? Trace { get; private set; }
 
-    public abstract object? Execute(Dictionary<string, object?>? input, IScriptExecutionContext? context = null);
+    public virtual Task<object?> ExecuteAsync(
+        IDictionary<string, object?> args, 
+        IScriptExecutionContext? trace = null, 
+        CancellationToken ct = default)
+    {
+        Trace = trace;
+        return ExecuteInternalAsync(args, trace, ct);
+    }
+
+    /// <summary>
+    /// 子类需实现的实际执行逻辑
+    /// </summary>
+    protected abstract Task<object?> ExecuteInternalAsync(
+        IDictionary<string, object?> args, 
+        IScriptExecutionContext? trace, 
+        CancellationToken ct);
 
     public virtual ScriptMetadata GetMetadata() => new ScriptMetadata(GetType().Name, "1.0.0");
 
@@ -22,10 +37,29 @@ public abstract class BaseWorkflowScript : IScriptExecutor
     /// </summary>
     protected T Record<T>(string stepName, Func<T> action, object? input = null)
     {
-        using var scope = Context?.BeginStep(stepName, input);
+        using var scope = Trace?.BeginStep(stepName, input);
         try
         {
             var result = action();
+            scope?.SetOutput(result);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            scope?.SetError(ex);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// 手动记录一个异步命名步骤
+    /// </summary>
+    protected async Task<T> RecordAsync<T>(string stepName, Func<Task<T>> action, object? input = null)
+    {
+        using var scope = Trace?.BeginStep(stepName, input);
+        try
+        {
+            var result = await action();
             scope?.SetOutput(result);
             return result;
         }

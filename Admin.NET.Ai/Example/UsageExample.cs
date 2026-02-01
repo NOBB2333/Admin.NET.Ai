@@ -60,7 +60,7 @@ public class UsageExample
 
             // 16. Test Advanced Prompt Engineering
             Console.WriteLine("\n--- Testing Advanced Prompt Engineering (Phase 3) ---");
-            var promptManager = scope.ServiceProvider.GetRequiredService<Admin.NET.Ai.Services.Prompt.IPromptManager>();
+            var promptManager = scope.ServiceProvider.GetRequiredService<IPromptManager>();
             
             // Register a structured prompt dynamically
             var jsonPrompt = @"{

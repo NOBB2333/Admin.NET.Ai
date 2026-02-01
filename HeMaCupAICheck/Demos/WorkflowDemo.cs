@@ -99,7 +99,7 @@ public static class WorkflowDemo
         {
             switch (evt)
             {
-                case AgentRunUpdateEvent agentEvt:
+                case AgentResponseUpdateEvent agentEvt:
                     // 首次收到内容时显示当前 Agent 名称
                     if (!stageStarted && currentStage < agentStages.Length)
                     {
@@ -395,7 +395,7 @@ public static class WorkflowDemo
                     Console.ResetColor();
                     break;
 
-                case AgentRunUpdateEvent agentEvt:
+                case AgentResponseUpdateEvent agentEvt:
                     Console.ForegroundColor = ConsoleColor.White;
                     Console.Write($"💬 ");
                     Console.Write(agentEvt.Update.Text);

@@ -1,4 +1,5 @@
 using Admin.NET.Ai.Abstractions;
+using Admin.NET.Ai.Models.Workflow;
 using SqlSugar;
 
 namespace Admin.NET.Ai.Example.NatashaHotReloadScript;
@@ -15,11 +16,14 @@ public class ScriptE : IScriptExecutor
 
     public ScriptMetadata GetMetadata() => new ScriptMetadata("ScriptE - Database Script", "1.0");
 
-    public object? Execute(Dictionary<string, object?>? input, IScriptExecutionContext? context = null)
+    public async Task<object?> ExecuteAsync(
+        IDictionary<string, object?> args, 
+        IScriptExecutionContext? trace = null, 
+        CancellationToken ct = default)
     {
         Console.WriteLine("[ScriptE] Querying Database for Students...");
         
-        var students = _db.Queryable<Student>().ToList();
+        var students = await _db.Queryable<Student>().ToListAsync(); // Assume ToListAsync exists for SqlSugar
         
         foreach (var s in students)
         {

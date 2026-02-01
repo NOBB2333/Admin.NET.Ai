@@ -1,14 +1,14 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace Admin.NET.Ai.Services.Workflow;
 
+/// <summary>
+/// 基于 Roslyn 的脚本源码重写器，用于自动注入追踪代码
+/// </summary>
 public class ScriptSourceRewriter : CSharpSyntaxRewriter
 {
-    private bool _hasInjectedField = false;
     private string? _className;
 
     public static string Rewrite(string source)
@@ -23,7 +23,7 @@ public class ScriptSourceRewriter : CSharpSyntaxRewriter
             "System" 
         };
         
-        var existingUsings = root.Usings.Select(u => u.Name.ToString()).ToHashSet();
+        var existingUsings = root.Usings.Select(u => u.Name?.ToString()).ToHashSet();
         foreach (var ns in requiredUsings)
         {
             if (!existingUsings.Contains(ns))
@@ -42,12 +42,12 @@ public class ScriptSourceRewriter : CSharpSyntaxRewriter
     public override SyntaxNode? VisitClassDeclaration(ClassDeclarationSyntax node)
     {
         _className = node.Identifier.Text;
-        _hasInjectedField = false;
         
         var newNode = (ClassDeclarationSyntax)base.VisitClassDeclaration(node)!;
         
-        // 注入私有上下文变量
-        var contextField = SyntaxFactory.ParseMemberDeclaration("private Admin.NET.Ai.Models.Workflow.IScriptExecutionContext? _scriptContext;")!;
+        // 注入私有追踪上下文变量
+        var contextField = SyntaxFactory.ParseMemberDeclaration(
+            "private Admin.NET.Ai.Models.Workflow.IScriptExecutionContext? _trace;")!;
         newNode = newNode.AddMembers(contextField);
         
         return newNode;
@@ -64,10 +64,13 @@ public class ScriptSourceRewriter : CSharpSyntaxRewriter
         var isVoid = returnType == "void";
         
         // 1. 构造参数捕获对象 (匿名对象)
-        // 自动过滤掉 IScriptExecutionContext 类型的参数，防止 JSON 序列化时的循环引用
+        // 自动过滤掉 IScriptExecutionContext 类型的参数和 ct/trace 参数
         string inputExpr = "null";
         var validParams = node.ParameterList.Parameters
-            .Where(p => p.Type?.ToString() != "IScriptExecutionContext" && p.Identifier.Text != "context")
+            .Where(p => p.Type?.ToString() != "IScriptExecutionContext" 
+                     && p.Type?.ToString() != "CancellationToken"
+                     && p.Identifier.Text != "trace"
+                     && p.Identifier.Text != "ct")
             .Select(p => p.Identifier.Text)
             .ToList();
 
@@ -76,8 +79,12 @@ public class ScriptSourceRewriter : CSharpSyntaxRewriter
             inputExpr = "new { " + string.Join(", ", validParams) + " }";
         }
 
-        // 2. 特殊处理 Execute 方法
-        string syncContext = methodName == "Execute" ? "_scriptContext = context;" : "";
+        // 2. 特殊处理 ExecuteAsync 方法 - 从 trace 参数捕获上下文
+        string syncContext = "";
+        if (methodName == "ExecuteAsync" && node.ParameterList.Parameters.Any(p => p.Identifier.Text == "trace"))
+        {
+             syncContext = "_trace = trace;";
+        }
 
         // 3. 构造重写后的方法体
         BlockSyntax newBody;
@@ -86,7 +93,7 @@ public class ScriptSourceRewriter : CSharpSyntaxRewriter
             newBody = SyntaxFactory.Block(
                 SyntaxFactory.ParseStatement(syncContext),
                 SyntaxFactory.ParseStatement($@"
-                    using (var scope = _scriptContext?.BeginStep(""{methodName}"", {inputExpr}))
+                    using (var scope = _trace?.BeginStep(""{methodName}"", {inputExpr}))
                     {{
                         try 
                         {{
@@ -102,11 +109,11 @@ public class ScriptSourceRewriter : CSharpSyntaxRewriter
         }
         else
         {
-            // 对于有返回值的方法，我们使用一个局部函数来包装原始逻辑，以便捕获返回值
+            // 对于有返回值的方法，使用局部函数包装原始逻辑以捕获返回值
             newBody = SyntaxFactory.Block(
                 SyntaxFactory.ParseStatement(syncContext),
                 SyntaxFactory.ParseStatement($@"
-                    using (var scope = _scriptContext?.BeginStep(""{methodName}"", {inputExpr}))
+                    using (var scope = _trace?.BeginStep(""{methodName}"", {inputExpr}))
                     {{
                         try 
                         {{

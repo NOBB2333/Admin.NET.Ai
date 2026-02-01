@@ -1,10 +1,7 @@
 using Admin.NET.Ai.Abstractions;
 using Admin.NET.Ai.Extensions;
+using Admin.NET.Ai.Models.Workflow;
 using Microsoft.Extensions.AI;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 
 namespace Admin.NET.Ai.Example.NatashaHotReloadScript;
 
@@ -22,12 +19,15 @@ public class ScriptD : IScriptExecutor
 
     public ScriptMetadata GetMetadata() => new ScriptMetadata("ScriptD - AI Chat Script", "1.0");
 
-    public object? Execute(Dictionary<string, object?>? input, IScriptExecutionContext? context = null)
+    public async Task<object?> ExecuteAsync(
+        IDictionary<string, object?> args, 
+        IScriptExecutionContext? trace = null, 
+        CancellationToken ct = default)
     {
         Console.WriteLine("[ScriptD] Starting AI Chat...");
         
         var prompt = "Explain Quantum Physics";
-        if (input != null && input.TryGetValue("prompt", out var p))
+        if (args != null && args.TryGetValue("prompt", out var p))
         {
             prompt = p?.ToString() ?? prompt;
         }
@@ -35,6 +35,6 @@ public class ScriptD : IScriptExecutor
         Console.WriteLine($"[ScriptD] Sending prompt: {prompt}");
         
         // 修复参数传递：包含 prompt, serviceProvider 和 provider ("DeepSeek")
-        return _llm.RunAsync(prompt, _serviceProvider, "DeepSeek");
+        return await _llm.RunAsync(prompt, _serviceProvider, "DeepSeek");
     }
 }

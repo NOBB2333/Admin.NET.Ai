@@ -55,6 +55,9 @@ public IEnumerable<IScriptExecutor> LoadScripts(IEnumerable<string> scriptConten
 }
 ```
 
+> **注意**: `ScriptContext` 类型也必须被引入到编译上下文中，系统已在 `NatashaScriptEngine` 中自动处理。
+```
+
 ## 👁️ 脚本可观测性 (Observability)
 
 为了解决动态脚本执行过程中的“黑盒”问题，系统内置了基于 Roslyn 的**零侵入式可观测性注入**机制。这使得脚本执行过程具备了类似 **N8N** 或 **Dify** 的可视化追踪能力。
@@ -95,8 +98,9 @@ private string GetGreeting(string name) {
 
 ## 🏗️ 架构设计
 ### 核心组件
-- **`IScriptExecutor`**: 脚本接口。`Execute` 方法接受一个 `IScriptExecutionContext` 可选参数。
-- **`ScriptExecutionContext`**: 执行上下文。作为一个容器，自动收集 `ScriptStepInfo` 树及其耗时、状态和数据。
+- **`IScriptExecutor`**: 脚本接口。`ExecuteAsync` 方法接受 `IDictionary` 参数和 `ScriptContext` 上下文。
+- **`ScriptContext`**: 脚本运行环境。包含 `IServiceProvider` (DI容器) 和可选的 `IScriptExecutionContext` (追踪上下文)。
+- **`IScriptExecutionContext`**: 仅用于可观测性追踪，包含 `ScriptStepInfo` 树。
 - **`ScriptSourceRewriter`**: 基于 `CSharpSyntaxRewriter` 的核心注入引擎。
 - **`NatashaScriptEngine`**: 集成了重写器，确保代码加载前已被自动增强。
 
@@ -108,9 +112,13 @@ private string GetGreeting(string name) {
 ```csharp
 public class MyDynamicExecutor : IScriptExecutor
 {
-    public object? Execute(Dictionary<string, object?>? input, IScriptExecutionContext? context = null)
+    public ScriptMetadata GetMetadata() => new ScriptMetadata("DemoScript", "1.0");
+
+    public async Task<object?> ExecuteAsync(IDictionary<string, object?> input, ScriptContext context)
     {
         var name = input["name"]?.ToString();
+        // 模拟异步
+        await Task.CompletedTask;
         return SayHello(name);
     }
 
@@ -120,15 +128,19 @@ public class MyDynamicExecutor : IScriptExecutor
 
 ### 带有轨迹捕获的运行方式
 ```csharp
-// 1. 创建执行上下文
-var context = new ScriptExecutionContext("MyScriptExecution");
+// 1. 创建执行上下文 (包含 DI 和 追踪器)
+var traceContext = new ScriptExecutionContext("MyScriptExecution");
+var context = new ScriptContext(serviceProvider) 
+{ 
+    ExecutionContext = traceContext 
+};
 
 // 2. 加载并运行
 var executor = engine.LoadScripts(new[] { code }).First();
-executor.Execute(new Dictionary<string, object?> { ["name"] = "Alice" }, context);
+await executor.ExecuteAsync(new Dictionary<string, object?> { ["name"] = "Alice" }, context);
 
 // 3. 获取并展示轨迹
-var trace = context.RootStep;
+var trace = traceContext.RootStep;
 Console.WriteLine($"脚本状态: {trace.Status}, 总耗时: {trace.Duration}");
 // 递归遍历 trace.Children 即可渲染出完美的 UI 执行视图
 ```

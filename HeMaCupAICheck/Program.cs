@@ -76,6 +76,7 @@ while (true)
     21. 代码生成助手 (Structured Output)
     22. 客服智能分流 (意图识别+路由)
     23. 内容安全过滤 (敏感词替换+PII脱敏)
+    24. MCP MiniApi 服务 (外部工具集成)
     --------------------------------------------------
     0. 退出程序
     ==================================================");
@@ -112,6 +113,7 @@ while (true)
             case "21": await CodeGeneratorDemo.RunAsync(sp); break;
             case "22": await CustomerServiceDemo.RunAsync(sp); break;
             case "23": await ContentSafetyDemo.RunAsync(sp); break;
+            case "24": await MiniApiServerDemo.RunAsync(sp); break;
             case "99": 
                 {
                     // Reflection Inspector

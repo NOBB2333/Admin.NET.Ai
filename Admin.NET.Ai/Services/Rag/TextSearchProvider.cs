@@ -10,7 +10,7 @@ public class TextSearchProviderOptions
     public int RecentMessageMemoryLimit { get; set; } = 6;
 }
 
-public class TextSearchProvider : AIContextProvider
+public class TextSearchProvider : IAiContextProvider
 {
     private readonly Func<string, CancellationToken, Task<IEnumerable<TextSearchResult>>> _searchFunc;
     private readonly TextSearchProviderOptions _options;
@@ -28,7 +28,7 @@ public class TextSearchProvider : AIContextProvider
         // serializedState 逻辑可以在这里
     }
 
-    public override async Task<AIContextItem?> InvokingAsync(AIContextProviderContext context, CancellationToken cancellationToken = default)
+    public async Task<AiContextItem?> InvokingAsync(AiContextProviderContext context, CancellationToken cancellationToken = default)
     {
         if (_options.SearchTime != TextSearchProviderOptions.TextSearchBehavior.BeforeAIInvoke)
             return null;
@@ -48,16 +48,16 @@ public class TextSearchProvider : AIContextProvider
             contextString += $"Source: {result.SourceName} ({result.SourceLink})\nContent: {result.Text}\n\n";
         }
         
-        return new AIContextItem
+        return new AiContextItem
         {
              Role = "system",
              Content = $"Relevant Information:\n{contextString}\nPlease use this information to answer the user request."
         };
     }
 
-    public override Task<AIContextItem?> InvokedAsync(AIContextProviderContext context, CancellationToken cancellationToken = default)
+    public Task<AiContextItem?> InvokedAsync(AiContextProviderContext context, CancellationToken cancellationToken = default)
     {
         // 可以保存搜索历史或反馈
-        return Task.FromResult<AIContextItem?>(null);
+        return Task.FromResult<AiContextItem?>(null);
     }
 }

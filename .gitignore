@@ -2,6 +2,7 @@
 bin/
 obj/
 publish/
+Admin.NET
 
 # Visual Studio / Visual Studio Code
 .vs/
@@ -33,6 +34,7 @@ Thumbs.db
 # Other
 mise.toml
 Admin.NET.Ai/Configuration2
+Admin.NET.Ai/Configuration3
 Admin.NET.Ai/doc
 Admin.NET.Ai/doc-agent
 Admin.NET.Ai/doc-mcp

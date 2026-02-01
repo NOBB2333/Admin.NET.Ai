@@ -1,4 +1,5 @@
 using Admin.NET.Ai.Abstractions;
+using Admin.NET.Ai.Models.Workflow;
 
 namespace Admin.NET.Ai.Example.NatashaHotReloadScript;
 
@@ -6,14 +7,18 @@ public class ScriptC : IScriptExecutor
 {
     public ScriptMetadata GetMetadata() => new ScriptMetadata("ScriptC - FlowTestScript", "1.0");
 
-    public object? Execute(Dictionary<string, object?>? input, IScriptExecutionContext? context = null)
+    public async Task<object?> ExecuteAsync(
+        IDictionary<string, object?> args, 
+        IScriptExecutionContext? trace = null, 
+        CancellationToken ct = default)
     {
         Console.WriteLine("Starting Flow Test...");
+        await Task.CompletedTask;
         
-        if (input != null)
+        if (args != null)
         {
             Console.WriteLine("Input received");
-            if (input.ContainsKey("user"))
+            if (args.ContainsKey("user"))
             {
                 // Branch A
                 return "User found";

@@ -6,25 +6,14 @@ namespace Admin.NET.Ai.Abstractions;
 /// <summary>
 /// 会话信息摘要
 /// </summary>
-public record SessionInfo(
-    string SessionId,
-    DateTime CreatedAt,
-    DateTime LastMessageAt,
-    int MessageCount,
-    string? Title = null,
-    Dictionary<string, object>? Metadata = null
-);
+public record SessionInfo(string SessionId, DateTime CreatedAt, DateTime LastMessageAt,
+    int MessageCount, string? Title = null, Dictionary<string, object>? Metadata = null );
 
 /// <summary>
 /// 分页结果
 /// </summary>
 /// <typeparam name="T">数据类型</typeparam>
-public record PagedResult<T>(
-    IReadOnlyList<T> Items,
-    int TotalCount,
-    int PageIndex,
-    int PageSize
-)
+public record PagedResult<T>(IReadOnlyList<T> Items, int TotalCount, int PageIndex, int PageSize )
 {
     public int TotalPages => (int)Math.Ceiling(TotalCount / (double)PageSize);
     public bool HasPreviousPage => PageIndex > 0;

@@ -20,6 +20,8 @@ Admin.NET.Ai/
 │   ├── LLMAgent.Mcp.json
 │   └── ...
 ├── Core/                   # 核心实现
+│   ├── Adapters/           # 适配器
+│   │   └── UriImageAdapter.cs
 │   ├── AiFactory.cs
 │   └── AiPipelineBuilder.cs
 ├── Middleware/             # 中间件

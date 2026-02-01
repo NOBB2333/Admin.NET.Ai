@@ -74,16 +74,13 @@ public class AiFactory : IAiFactory
     {
         var config = _config.Clients[name];
         
-        // 1. 创建原始客户端
-        IChatClient innerClient = config.Provider switch
-        {
-            "OpenAI" => CreateOpenAiClient(config),
-            "AzureOpenAI" => CreateAzureClient(config),
-            "Ollama" => CreateOllamaClient(config),
-            _ => CreateGenericOpenAiClient(config)  // 兼容 OpenAI 格式的供应商
-        };
+        // 1. 创建基础客户端 (统一使用 OpenAI 兼容协议)
+        IChatClient innerClient = CreateBaseClient(config);
         
-        // 2. 包装中间件管道
+        // 2. 挂载图片适配器 (解决内网/公网图片访问问题)
+        innerClient = ActivatorUtilities.CreateInstance<UriImageAdapter>(_serviceProvider, innerClient);
+        
+        // 3. 包装中间件管道
         return _pipelineBuilder.Build(innerClient);
     }
 }
@@ -189,13 +186,13 @@ public async Task<IChatClient> GetChatClientWithFallbackAsync(
 ### OpenAI 兼容供应商
 
 ```csharp
-private IChatClient CreateGenericOpenAiClient(ClientConfig config)
+private IChatClient CreateBaseClient(ClientConfig config)
 {
-    // 大多数供应商兼容 OpenAI API 格式
+    // 所有主供应商都兼容 OpenAI API 格式，只需配置 BaseUrl
     return new OpenAIClient(new ApiKeyCredential(config.ApiKey), new OpenAIClientOptions
     {
         Endpoint = new Uri(config.BaseUrl ?? "https://api.openai.com/v1")
-    }).GetChatClient(config.ModelId);
+    }).GetChatClient(config.ModelId).AsChatClient();
 }
 ```
 

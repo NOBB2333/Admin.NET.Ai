@@ -1,5 +1,4 @@
 using Admin.NET.Ai.Abstractions;
-using Admin.NET.Ai.Services.Conversation;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 

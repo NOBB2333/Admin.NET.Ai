@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Admin.NET.Ai.Abstractions;
 using Admin.NET.Ai.Services.Prompt;
 using Microsoft.Extensions.Logging;
 

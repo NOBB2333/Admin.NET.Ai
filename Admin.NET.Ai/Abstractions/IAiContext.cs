@@ -36,7 +36,7 @@ public interface IAiContext
 
     /// <summary>
     /// 额外的请求参数/选项
-    /// </summary>
+    /// </summary>  
     IDictionary<string, object?> Options { get; }
 
     /// <summary>

@@ -6,8 +6,8 @@
 |------|------|------|
 | `NatashaScriptEngine.cs` | `Services/Workflow/` | 脚本引擎核心 |
 | `ScriptSourceRewriter.cs` | `Services/Workflow/` | AST 重写器 (追踪) |
-| `IScriptContext.cs` | `Abstractions/` | 脚本上下文接口 |
-| `ScriptingDemo.cs` | `Demos/` | 演示代码 |
+| `IScriptExecutor.cs` | `Abstractions/` | 脚本执行接口与上下文 |
+| `ScriptContext` | `Abstractions/` | 脚本执行环境记录 |
 
 ---
 
@@ -43,20 +43,12 @@ public class NatashaScriptEngine
 {
     private readonly ConcurrentDictionary<string, CompiledScript> _scriptCache = new();
     
-    public async Task<object?> ExecuteAsync(string scriptCode, IScriptContext context)
+    public async Task<object?> ExecuteAsync(string scriptCode, IDictionary<string, object?> args, ScriptContext context)
     {
-        // 1. 计算脚本 Hash (用于缓存)
-        var hash = ComputeHash(scriptCode);
-        
-        // 2. 检查缓存
-        if (!_scriptCache.TryGetValue(hash, out var compiled))
-        {
-            compiled = await CompileAsync(scriptCode);
-            _scriptCache[hash] = compiled;
-        }
+        // ... 省略缓存编译逻辑 ...
         
         // 3. 执行
-        return await compiled.ExecuteAsync(context);
+        return await compiled.ExecuteAsync(args, context);
     }
     
     private async Task<CompiledScript> CompileAsync(string scriptCode)
@@ -71,7 +63,8 @@ public class NatashaScriptEngine
         var rewrittenCode = RewriteForTracing(scriptCode);
         
         builder.Add(rewrittenCode);
-        builder.AddReference(typeof(IScriptContext).Assembly);
+        builder.Add(rewrittenCode);
+        builder.AddReference(typeof(ScriptContext).Assembly);
         
         var assembly = builder.GetAssembly();
         var scriptType = assembly.GetTypes().First(t => t.GetMethod("Execute") != null);
@@ -84,35 +77,29 @@ public class NatashaScriptEngine
 ### 2. 脚本上下文
 
 ```csharp
-public interface IScriptContext
+/// <summary>
+/// 脚本执行上下文 (环境)
+/// </summary>
+public record ScriptContext(
+    IServiceProvider Services, 
+    CancellationToken CancellationToken = default
+)
 {
-    // 输入参数
-    Dictionary<string, object?> Input { get; }
+    public string? CorrelationId { get; init; } 
     
-    // 输出结果
-    Dictionary<string, object?> Output { get; }
-    
-    // 服务访问
-    IServiceProvider Services { get; }
-    
-    // 追踪记录
-    List<TraceEntry> Traces { get; }
-    
-    // 日志
-    void Log(string message);
+    // 可观测性/追踪上下文 (可选)
+    public IScriptExecutionContext? ExecutionContext { get; init; }
 }
 
-public class ScriptContext : IScriptContext
+/// <summary>
+/// 追踪上下文 (包含执行树)
+/// </summary>
+public interface IScriptExecutionContext
 {
-    public Dictionary<string, object?> Input { get; } = new();
-    public Dictionary<string, object?> Output { get; } = new();
-    public IServiceProvider Services { get; init; } = null!;
-    public List<TraceEntry> Traces { get; } = new();
-    
-    public void Log(string message)
-    {
-        Traces.Add(new TraceEntry { Time = DateTime.Now, Message = message });
-    }
+    ScriptStepInfo RootStep { get; }
+    IScriptStepScope BeginStep(string name, object? input = null);
+    void SetOutput(object? output);
+    void SetError(Exception ex);
 }
 ```
 
@@ -154,14 +141,14 @@ public class ScriptSourceRewriter : CSharpSyntaxRewriter
 ### 基础脚本
 
 ```csharp
-public class MyScript
+public class MyScript : IScriptExecutor
 {
-    public object Execute(IScriptContext context)
+    public ScriptMetadata GetMetadata() => new ScriptMetadata("Basic", "1.0");
+
+    public async Task<object?> ExecuteAsync(IDictionary<string, object?> input, ScriptContext context)
     {
-        var name = context.Input["name"]?.ToString() ?? "World";
+        var name = input["name"]?.ToString() ?? "World";
         var greeting = $"Hello, {name}!";
-        
-        context.Output["greeting"] = greeting;
         return greeting;
     }
 }
@@ -170,18 +157,19 @@ public class MyScript
 ### Agent 脚本
 
 ```csharp
-public class AgentScript
+public class AgentScript : IScriptExecutor
 {
-    public async Task<object> Execute(IScriptContext context)
+    public ScriptMetadata GetMetadata() => new ScriptMetadata("AgentScript", "1.0");
+
+    public async Task<object?> ExecuteAsync(IDictionary<string, object?> input, ScriptContext context)
     {
         var aiFactory = context.Services.GetRequiredService<IAiFactory>();
         var client = aiFactory.GetDefaultChatClient();
         
-        var prompt = context.Input["prompt"]?.ToString() ?? "";
-        var response = await client.GetResponseAsync(prompt);
+        var prompt = input["prompt"]?.ToString() ?? "";
+        // var response = await client.RunAsync(prompt); // 假设有扩展方法
         
-        context.Output["response"] = response.Text;
-        return response.Text;
+        return "AI Response Placeholder";
     }
 }
 ```
@@ -226,23 +214,28 @@ public class ScriptWatcher
 var engine = sp.GetRequiredService<NatashaScriptEngine>();
 
 var script = @"
-public class Calculator
+using Admin.NET.Ai.Abstractions;
+public class Calculator : IScriptExecutor
 {
-    public object Execute(IScriptContext context)
+    public ScriptMetadata GetMetadata() => new ScriptMetadata(""Calc"", ""1.0"");
+    public async Task<object?> ExecuteAsync(IDictionary<string, object?> input, ScriptContext context)
     {
-        var a = (int)context.Input[""a""];
-        var b = (int)context.Input[""b""];
+        var a = (int)input[""a""];
+        var b = (int)input[""b""];
         return a + b;
     }
 }";
 
-var ctx = new ScriptContext
-{
-    Input = { ["a"] = 10, ["b"] = 20 },
-    Services = sp
-};
+// 1. 加载
+var executors = engine.LoadScripts(new[] { script });
 
-var result = await engine.ExecuteAsync(script, ctx);
+// 2. 准备上下文
+var traceContext = new ScriptExecutionContext("CalcRun");
+var ctx = new ScriptContext(sp) { ExecutionContext = traceContext };
+var args = new Dictionary<string, object?> { ["a"] = 10, ["b"] = 20 };
+
+// 3. 执行
+var result = await executors.First().ExecuteAsync(args, ctx);
 Console.WriteLine($"Result: {result}");  // 30
 ```
 

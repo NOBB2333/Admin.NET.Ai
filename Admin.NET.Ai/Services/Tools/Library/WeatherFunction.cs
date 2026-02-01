@@ -7,7 +7,7 @@ namespace Admin.NET.Ai.Services.Tools.Library;
 /// <summary>
 /// 示例工具：天气查询
 /// </summary>
-public class WeatherAiCallFunction : IAiCallAbleFunction
+public class WeatherAiCallFunction : IAiCallableFunction
 {
     public string Name => "WeatherTool";
     public string Description => "提供天气查询服务";

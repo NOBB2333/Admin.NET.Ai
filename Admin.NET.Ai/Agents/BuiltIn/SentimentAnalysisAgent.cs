@@ -13,6 +13,10 @@ namespace Admin.NET.Ai.Agents.BuiltIn;
 /// </summary>
 public class SentimentAnalysisAgent
 {
+    // Public properties for easy initialization (avoiding reflection)
+    public string Name { get; set; } = "SentimentAnalysisAgent";
+    public string Instructions { get; set; } = SystemInstruction;
+
     private readonly IChatClient _chatClient;
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<SentimentAnalysisAgent> _logger;

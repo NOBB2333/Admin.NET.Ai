@@ -4,7 +4,6 @@ using Admin.NET.Ai.Core;
 using Admin.NET.Ai.Middleware;
 using Admin.NET.Ai.Services;
 using Admin.NET.Ai.Services.Context;
-using Admin.NET.Ai.Services.Conversation;
 using Admin.NET.Ai.Services.Cost;
 using Admin.NET.Ai.Services.Data;
 using Admin.NET.Ai.Services.Prompt;
@@ -39,12 +38,8 @@ public static class ServiceCollectionInit
     public static IServiceCollection AddAdminNetAi(this IServiceCollection services, IConfigurationManager configuration)
     {
         // 0. 自动扫描并加载 Configuration 目录下的配置文件
-        // 注意：单文件发布时 AppContext.BaseDirectory 指向临时解压目录，
-        // 需要使用可执行文件的真实路径
-        var exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
-        var baseDir = !string.IsNullOrEmpty(exePath) 
-            ? Path.GetDirectoryName(exePath)! 
-            : AppContext.BaseDirectory;
+        // 使用 AppContext.BaseDirectory 确保在所有环境(IIS, Docker, SingleFile)下稳定
+        var baseDir = AppContext.BaseDirectory;
         var configDir = Path.Combine(baseDir, "Configuration");
         
         if (Directory.Exists(configDir))
@@ -53,6 +48,7 @@ public static class ServiceCollectionInit
             foreach (var file in jsonFiles)
             {
                 // 使用支持注释的 JSON 加载器（允许 // 和 /* */ 注释，与 Furion 框架一致）
+                // 这样配置会自动合并到 IConfiguration 中，后续的 Options 绑定也会自动生效
                 configuration.AddJsonFileWithComments(file, optional: true, reloadOnChange: true);
                 Console.WriteLine($"[Config] Loaded: {file}");
             }
@@ -175,7 +171,7 @@ public static class ServiceCollectionInit
         // PromptManager 应该已经注册过，或者如果是新加的依赖:
         // services.TryAddSingleton<IPromptManager, PromptManager>(); // 假设框架会自动扫描或已在上文注册
         // 如果没有，这里显式添加:
-        services.TryAddSingleton<Services.Prompt.IPromptManager, PromptManager>();
+        services.TryAddSingleton<IPromptManager, PromptManager>();
 
         // 9. 内置 Agents (最佳实践)
         services.TryAddScoped<Admin.NET.Ai.Services.Processing.BatchProcessingService>();

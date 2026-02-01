@@ -7,20 +7,20 @@ using Microsoft.Extensions.AI;
 namespace Admin.NET.Ai.Storage;
 
 /// <summary>
-/// Microsoft Agent Framework (MAF) 聊天消息存储实现
-/// 适配 MAF 1.0.0-preview.260127.1 新的 ChatHistoryProvider API
+/// Microsoft Agent Framework (MAF) 聊天历史提供者
+/// 适配 MAF 1.0.0-preview.260127.1 的 ChatHistoryProvider API
 /// 
-/// 新版 API 中：
-/// - InvokingAsync 返回要添加到上下文的历史消息
-/// - InvokedAsync 在 LLM 调用完成后调用，用于后续处理
+/// 职责：作为 Agent 与持久化存储之间的桥梁
+/// - InvokingAsync: 从 IAgentChatMessageStore 加载历史消息提供给 Agent
+/// - InvokedAsync: LLM 调用完成后的回调
 /// </summary>
-public sealed class AgentChatMessageStore : ChatHistoryProvider
+public sealed class AgentChatHistoryProvider : ChatHistoryProvider
 {
     private readonly IAgentChatMessageStore _persistenceStore;
     private readonly List<ChatMessage> _messages = new();
     public string ThreadDbKey { get; private set; }
 
-    public AgentChatMessageStore(
+    public AgentChatHistoryProvider(
         IAgentChatMessageStore persistenceStore,
         JsonElement serializedStoreState,
         string threadId,

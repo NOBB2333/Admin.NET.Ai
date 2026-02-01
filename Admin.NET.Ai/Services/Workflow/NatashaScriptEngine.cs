@@ -1,18 +1,34 @@
 using Admin.NET.Ai.Abstractions;
+using Admin.NET.Ai.Models.Workflow;
 using Microsoft.Extensions.DependencyInjection;
 using SqlSugar;
 
 namespace Admin.NET.Ai.Services.Workflow;
-
 
 //  这会感觉可能还是有问题的。详见我的这个demo看看 https://github.com/NOBB2333/NatashaHotReloadDemo  
 public class NatashaScriptEngine(IServiceProvider serviceProvider)
 {
     private INatashaDynamicLoadContextBase? _currentDomain;
     private System.WeakReference? _weakDomain;
+    private List<IScriptExecutor> _loadedExecutors = new();
 
     public void Unload()
     {
+        // 调用所有已加载脚本的 OnUnloadingAsync 钩子
+        foreach (var executor in _loadedExecutors)
+        {
+            try
+            {
+                executor.OnUnloadingAsync().GetAwaiter().GetResult();
+                Console.WriteLine($"[Natasha引擎] ✅ {executor.GetMetadata().Name} OnUnloadingAsync 完成");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Natasha引擎] ⚠️ {executor.GetMetadata().Name} OnUnloadingAsync 失败: {ex.Message}");
+            }
+        }
+        _loadedExecutors.Clear();
+
         if (_currentDomain != null)
         {
             _weakDomain = new System.WeakReference(_currentDomain);
@@ -43,7 +59,7 @@ public class NatashaScriptEngine(IServiceProvider serviceProvider)
 
         try
         {
-            #region 1. 清理旧域
+            #region 1. 清理旧域 (会触发 OnUnloadingAsync)
             Unload();
             #endregion
 
@@ -64,7 +80,7 @@ public class NatashaScriptEngine(IServiceProvider serviceProvider)
                  ctx.AddReferenceAndUsingCode(typeof(Enumerable).Assembly);
                  ctx.AddReferenceAndUsingCode(typeof(IServiceProvider).Assembly);
                   ctx.AddReferenceAndUsingCode(typeof(IScriptExecutor).Assembly);
-                  ctx.AddReferenceAndUsingCode(typeof(IScriptExecutionContext)); // 明确添加执行上下文命名空间和引用
+                  ctx.AddReferenceAndUsingCode(typeof(IScriptExecutionContext)); // 追踪上下文
                   ctx.AddReferenceAndUsingCode(typeof(Dictionary<,>).Assembly);
                  return ctx;
             });
@@ -105,20 +121,48 @@ public class NatashaScriptEngine(IServiceProvider serviceProvider)
                 try
                 {
                     // 使用 ActivatorUtilities 支持构造函数注入
-                    // 这利用 _serviceProvider 来解析依赖 (如 ILLMService)
                     Console.WriteLine($"[Natasha引擎] 正在使用依赖注入实例化 {type.Name} ...");
                     var executor = (IScriptExecutor)ActivatorUtilities.CreateInstance(serviceProvider, type);
                     executors.Add(executor);
+                    
                     var meta = executor.GetMetadata();
                     Console.WriteLine($"[系统] 已加载脚本: {meta.Name} v{meta.Version}");
+                    
+                    // 显示超时配置
+                    if (meta.MaxExecutionTime.HasValue)
+                    {
+                        Console.WriteLine($"       ⏱️ 最大执行时间: {meta.MaxExecutionTime.Value.TotalSeconds}s");
+                    }
+                    if (meta.Tags?.Length > 0)
+                    {
+                        Console.WriteLine($"       🏷️ 标签: [{string.Join(", ", meta.Tags)}]");
+                    }
+                    
                     Console.WriteLine();
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine($"[错误] 实例化脚本 {type.Name} 失败: {ex.Message}");
-                    // 可根据需要重新抛出或处理
                 }
             }
+            #endregion
+
+            #region 6. 调用生命周期钩子 OnLoadedAsync
+            foreach (var executor in executors)
+            {
+                try
+                {
+                    executor.OnLoadedAsync(serviceProvider).GetAwaiter().GetResult();
+                    Console.WriteLine($"[Natasha引擎] ✅ {executor.GetMetadata().Name} OnLoadedAsync 完成");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[Natasha引擎] ⚠️ {executor.GetMetadata().Name} OnLoadedAsync 失败: {ex.Message}");
+                }
+            }
+            
+            // 保存引用以便后续调用 OnUnloadingAsync
+            _loadedExecutors = executors;
             #endregion
 
             return executors;
