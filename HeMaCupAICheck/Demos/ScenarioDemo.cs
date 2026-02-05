@@ -1,6 +1,5 @@
 using Admin.NET.Ai.Abstractions;
 using Admin.NET.Ai.Options;
-using Admin.NET.Ai.Services.Rag; // For RagSearchOptions
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Admin.NET.Ai.Extensions;
@@ -32,24 +31,24 @@ public static class ScenarioDemo
             Console.WriteLine("1. [Thinking] 正在检索相关知识...");
             
             // RAG 检索
-            var searchResults = await ragService.SearchAsync(question, new RagSearchOptions { Strategy = RagStrategy.Naive });
-            var context = string.Join("\n", searchResults);
+            var searchResult = await ragService.SearchAsync(question, new RagSearchOptions { Strategy = RagStrategy.Naive });
+            var context = string.Join("\n", searchResult.Documents.Select(d => d.Content));
             
-            Console.WriteLine($"   检索到 {searchResults.Count} 条记录。");
+            Console.WriteLine($"   检索到 {searchResult.Documents.Count} 条记录。");
 
             Console.WriteLine("2. [Thinking] 正在生成回答...");
 
             // 构造 Prompt
-            var prompt = $@"
+            var prompt = $"""
                 你是一个智能助手。请基于以下参考资料回答用户问题。
-                如果参考资料不足以回答，请回答“我不确定”。
+                如果参考资料不足以回答，请回答"我不确定"。
 
                 参考资料:
                 {context}
 
                 用户问题: {question}
                 回答:
-                ";
+                """;
             
             var messages = new[] { new ChatMessage(ChatRole.User, prompt) };
             

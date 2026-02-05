@@ -1,5 +1,4 @@
-using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.ChatCompletion;
+using Microsoft.Extensions.AI;
 
 namespace Admin.NET.Ai.Abstractions;
 
@@ -21,7 +20,7 @@ public record PagedResult<T>(IReadOnlyList<T> Items, int TotalCount, int PageInd
 }
 
 /// <summary>
-/// 对话消息存储接口（五星级企业标准）
+/// 对话消息存储接口（MEAI-first 企业标准）
 /// 支持：批量操作、分页、元数据、会话管理
 /// </summary>
 public interface IChatMessageStore
@@ -34,7 +33,7 @@ public interface IChatMessageStore
     /// <param name="sessionId">会话ID</param>
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns>完整对话历史</returns>
-    Task<ChatHistory> GetHistoryAsync(string sessionId, CancellationToken cancellationToken = default);
+    Task<IList<ChatMessage>> GetHistoryAsync(string sessionId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 保存单条消息
@@ -42,7 +41,7 @@ public interface IChatMessageStore
     /// <param name="sessionId">会话ID</param>
     /// <param name="message">消息内容</param>
     /// <param name="cancellationToken">取消令牌</param>
-    Task SaveMessageAsync(string sessionId, ChatMessageContent message, CancellationToken cancellationToken = default);
+    Task SaveMessageAsync(string sessionId, ChatMessage message, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 清除历史
@@ -61,7 +60,7 @@ public interface IChatMessageStore
     /// <param name="sessionId">会话ID</param>
     /// <param name="messages">消息列表</param>
     /// <param name="cancellationToken">取消令牌</param>
-    Task SaveMessagesAsync(string sessionId, IEnumerable<ChatMessageContent> messages, CancellationToken cancellationToken = default);
+    Task SaveMessagesAsync(string sessionId, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 替换整个对话历史（用于压缩后更新）
@@ -69,7 +68,7 @@ public interface IChatMessageStore
     /// <param name="sessionId">会话ID</param>
     /// <param name="messages">新的消息列表</param>
     /// <param name="cancellationToken">取消令牌</param>
-    Task ReplaceHistoryAsync(string sessionId, IEnumerable<ChatMessageContent> messages, CancellationToken cancellationToken = default);
+    Task ReplaceHistoryAsync(string sessionId, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken = default);
 
     #endregion
 
@@ -83,7 +82,7 @@ public interface IChatMessageStore
     /// <param name="pageSize">每页数量</param>
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns>分页结果</returns>
-    Task<PagedResult<ChatMessageContent>> GetPagedHistoryAsync(
+    Task<PagedResult<ChatMessage>> GetPagedHistoryAsync(
         string sessionId, 
         int pageIndex = 0, 
         int pageSize = 20, 
@@ -95,7 +94,7 @@ public interface IChatMessageStore
     /// <param name="sessionId">会话ID</param>
     /// <param name="count">消息数量</param>
     /// <param name="cancellationToken">取消令牌</param>
-    Task<IReadOnlyList<ChatMessageContent>> GetRecentMessagesAsync(
+    Task<IReadOnlyList<ChatMessage>> GetRecentMessagesAsync(
         string sessionId, 
         int count, 
         CancellationToken cancellationToken = default);
@@ -147,4 +146,3 @@ public interface IChatMessageStore
 
     #endregion
 }
-

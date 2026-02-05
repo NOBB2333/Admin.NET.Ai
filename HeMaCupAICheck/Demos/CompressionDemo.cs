@@ -1,5 +1,6 @@
+#pragma warning disable MEAI001 // IChatReducer 是预览 API
 using Microsoft.Extensions.DependencyInjection;
-using IChatReducer = Admin.NET.Ai.Abstractions.IChatReducer;
+using Microsoft.Extensions.AI;
 
 namespace HeMaCupAICheck.Demos;
 
@@ -9,8 +10,7 @@ public static class CompressionDemo
     {
         Console.WriteLine("\n=== [6] 上下文压缩策略演示 ===");
 
-        // 1. 获取 Reducer
-        // 也可以获取具体的 Reducer via sp.GetRequiredService<AdaptiveCompressionReducer>()
+        // 1. 获取 Reducer (MEAI 接口)
         var reducer = sp.GetService<IChatReducer>();
         
         if (reducer == null)
@@ -21,17 +21,16 @@ public static class CompressionDemo
 
         Console.WriteLine($"当前使用的 Reducer: {reducer.GetType().Name}");
 
-        // 2. 模拟长对话历史 (使用 Semantic Kernel 类型以匹配 IChatReducer)
-        var history = new List<Microsoft.SemanticKernel.ChatMessageContent>();
+        // 2. 模拟长对话历史 (使用 MEAI ChatMessage 类型)
+        var history = new List<ChatMessage>();
         for (int i = 0; i < 20; i++)
         {
-            history.Add(new Microsoft.SemanticKernel.ChatMessageContent(Microsoft.SemanticKernel.ChatCompletion.AuthorRole.User, $"这是第 {i+1} 条用户消息，包含一些详细的上下文信息需要被保留或压缩。"));
-            history.Add(new Microsoft.SemanticKernel.ChatMessageContent(Microsoft.SemanticKernel.ChatCompletion.AuthorRole.Assistant, $"这是第 {i+1} 条助手回复，包含对应的信息。"));
+            history.Add(new ChatMessage(ChatRole.User, $"这是第 {i+1} 条用户消息，包含一些详细的上下文信息需要被保留或压缩。"));
+            history.Add(new ChatMessage(ChatRole.Assistant, $"这是第 {i+1} 条助手回复，包含对应的信息。"));
         }
         
         // 插入关键指令（应该被保护）
-        // 插入关键指令（应该被保护）
-        history.Add(new Microsoft.SemanticKernel.ChatMessageContent(Microsoft.SemanticKernel.ChatCompletion.AuthorRole.System, "IMPORTANT: Always answer in JSON."));
+        history.Add(new ChatMessage(ChatRole.System, "IMPORTANT: Always answer in JSON."));
 
         Console.WriteLine($"\n原始消息数量: {history.Count}");
 
@@ -45,7 +44,8 @@ public static class CompressionDemo
         Console.WriteLine("\n--- 压缩后保留的消息摘要 ---");
         foreach (var msg in reducedList)
         {
-            var preview = msg.Content.Length > 50 ? msg.Content.Substring(0, 47) + "..." : msg.Content;
+            var text = msg.Text ?? "";
+            var preview = text.Length > 50 ? text.Substring(0, 47) + "..." : text;
             Console.WriteLine($"[{msg.Role}] {preview}");
         }
     }

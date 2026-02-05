@@ -33,15 +33,15 @@ AI 应用不是一次性的任务执行，而是持续的“对话流”。为�
 public interface IChatMessageStore
 {
     // === 基础操作 ===
-    Task<ChatHistory> GetHistoryAsync(string sessionId, CancellationToken ct = default);
-    Task SaveMessageAsync(string sessionId, ChatMessageContent message, CancellationToken ct = default);
-    Task ClearHistoryAsync(string sessionId, CancellationToken ct = default);
+    Task<IList<ChatMessage>> GetHistoryAsync(string sessionId, CancellationToken cancellationToken = default);
+    Task SaveMessagesAsync(string sessionId, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken = default);
+    Task ClearHistoryAsync(string sessionId, CancellationToken cancellationToken = default);
 
-    // === 增强功能 (New) ===
-    Task SaveMessagesAsync(string sessionId, IEnumerable<ChatMessageContent> messages, CancellationToken ct = default);
-    Task<PagedResult<ChatMessageContent>> GetPagedHistoryAsync(string sessionId, int page, int size, CancellationToken ct = default);
-    Task<PagedResult<SessionInfo>> GetSessionsAsync(int page, int size, CancellationToken ct = default); // 获取所有会话
-    Task<SessionInfo?> GetSessionInfoAsync(string sessionId, CancellationToken ct = default); // 获取会话元数据
+    // === 增强功能 ===
+    Task ReplaceHistoryAsync(string sessionId, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken = default);
+    Task<PagedResult<ChatMessage>> GetPagedHistoryAsync(string sessionId, int page, int size, CancellationToken cancellationToken = default);
+    Task<PagedResult<SessionInfo>> GetSessionsAsync(int page, int size, CancellationToken cancellationToken = default);
+    Task<SessionInfo?> GetSessionInfoAsync(string sessionId, CancellationToken cancellationToken = default);
 }
 ```
 

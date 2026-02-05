@@ -1,17 +1,16 @@
 using System.Collections.Concurrent;
-using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.ChatCompletion;
+using Microsoft.Extensions.AI;
 using Admin.NET.Ai.Abstractions;
 
 namespace Admin.NET.Ai.Storage;
 
 /// <summary>
-/// 内存对话存储（五星级企业标准实现）
+/// 内存对话存储（MEAI-first 企业标准实现）
 /// 支持：会话管理、批量操作、分页查询
 /// </summary>
 public class InMemoryChatMessageStore : IChatMessageStore
 {
-    private readonly ConcurrentDictionary<string, ChatHistory> _store = new();
+    private readonly ConcurrentDictionary<string, List<ChatMessage>> _store = new();
     private readonly ConcurrentDictionary<string, SessionMetadata> _sessionMetadata = new();
 
     // 内部会话元数据
@@ -22,23 +21,24 @@ public class InMemoryChatMessageStore : IChatMessageStore
 
     #region 基础操作
 
-    public Task<ChatHistory> GetHistoryAsync(string sessionId, CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(_store.GetOrAdd(sessionId, _ =>
-        {
-            _sessionMetadata.TryAdd(sessionId, new SessionMetadata(DateTime.UtcNow));
-            return new ChatHistory();
-        }));
-    }
-
-    public Task SaveMessageAsync(string sessionId, ChatMessageContent message, CancellationToken cancellationToken = default)
+    public Task<IList<ChatMessage>> GetHistoryAsync(string sessionId, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var history = _store.GetOrAdd(sessionId, _ =>
         {
             _sessionMetadata.TryAdd(sessionId, new SessionMetadata(DateTime.UtcNow));
-            return new ChatHistory();
+            return new List<ChatMessage>();
+        });
+        return Task.FromResult<IList<ChatMessage>>(history);
+    }
+
+    public Task SaveMessageAsync(string sessionId, ChatMessage message, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var history = _store.GetOrAdd(sessionId, _ =>
+        {
+            _sessionMetadata.TryAdd(sessionId, new SessionMetadata(DateTime.UtcNow));
+            return new List<ChatMessage>();
         });
         history.Add(message);
         
@@ -63,13 +63,13 @@ public class InMemoryChatMessageStore : IChatMessageStore
 
     #region 批量操作
 
-    public Task SaveMessagesAsync(string sessionId, IEnumerable<ChatMessageContent> messages, CancellationToken cancellationToken = default)
+    public Task SaveMessagesAsync(string sessionId, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var history = _store.GetOrAdd(sessionId, _ =>
         {
             _sessionMetadata.TryAdd(sessionId, new SessionMetadata(DateTime.UtcNow));
-            return new ChatHistory();
+            return new List<ChatMessage>();
         });
         
         foreach (var message in messages)
@@ -85,14 +85,10 @@ public class InMemoryChatMessageStore : IChatMessageStore
         return Task.CompletedTask;
     }
 
-    public Task ReplaceHistoryAsync(string sessionId, IEnumerable<ChatMessageContent> messages, CancellationToken cancellationToken = default)
+    public Task ReplaceHistoryAsync(string sessionId, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var newHistory = new ChatHistory();
-        foreach (var message in messages)
-        {
-            newHistory.Add(message);
-        }
+        var newHistory = new List<ChatMessage>(messages);
         _store[sessionId] = newHistory;
         
         if (_sessionMetadata.TryGetValue(sessionId, out var meta))
@@ -107,7 +103,7 @@ public class InMemoryChatMessageStore : IChatMessageStore
 
     #region 分页与查询
 
-    public Task<PagedResult<ChatMessageContent>> GetPagedHistoryAsync(
+    public Task<PagedResult<ChatMessage>> GetPagedHistoryAsync(
         string sessionId, 
         int pageIndex = 0, 
         int pageSize = 20, 
@@ -117,17 +113,17 @@ public class InMemoryChatMessageStore : IChatMessageStore
         
         if (!_store.TryGetValue(sessionId, out var history))
         {
-            return Task.FromResult(new PagedResult<ChatMessageContent>(
-                Array.Empty<ChatMessageContent>(), 0, pageIndex, pageSize));
+            return Task.FromResult(new PagedResult<ChatMessage>(
+                Array.Empty<ChatMessage>(), 0, pageIndex, pageSize));
         }
 
         var totalCount = history.Count;
         var items = history.Skip(pageIndex * pageSize).Take(pageSize).ToList();
         
-        return Task.FromResult(new PagedResult<ChatMessageContent>(items, totalCount, pageIndex, pageSize));
+        return Task.FromResult(new PagedResult<ChatMessage>(items, totalCount, pageIndex, pageSize));
     }
 
-    public Task<IReadOnlyList<ChatMessageContent>> GetRecentMessagesAsync(
+    public Task<IReadOnlyList<ChatMessage>> GetRecentMessagesAsync(
         string sessionId, 
         int count, 
         CancellationToken cancellationToken = default)
@@ -136,11 +132,11 @@ public class InMemoryChatMessageStore : IChatMessageStore
         
         if (!_store.TryGetValue(sessionId, out var history))
         {
-            return Task.FromResult<IReadOnlyList<ChatMessageContent>>(Array.Empty<ChatMessageContent>());
+            return Task.FromResult<IReadOnlyList<ChatMessage>>(Array.Empty<ChatMessage>());
         }
 
         var messages = history.TakeLast(count).ToList();
-        return Task.FromResult<IReadOnlyList<ChatMessageContent>>(messages);
+        return Task.FromResult<IReadOnlyList<ChatMessage>>(messages);
     }
 
     public Task<int> GetMessageCountAsync(string sessionId, CancellationToken cancellationToken = default)
@@ -210,4 +206,3 @@ public class InMemoryChatMessageStore : IChatMessageStore
 
     #endregion
 }
-

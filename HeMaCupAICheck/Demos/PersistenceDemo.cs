@@ -1,6 +1,5 @@
 using Admin.NET.Ai.Abstractions;
-using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.ChatCompletion;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace HeMaCupAICheck.Demos;
@@ -9,7 +8,7 @@ public static class PersistenceDemo
 {
     public static async Task RunAsync(IServiceProvider sp)
     {
-        Console.WriteLine("\n=== [10] 对话持久化演示 (Semantic Kernel Store) ===");
+        Console.WriteLine("\n=== [10] 对话持久化演示 (MEAI ChatMessage Store) ===");
 
         var store = sp.GetService<IChatMessageStore>();
         if (store == null)
@@ -24,13 +23,12 @@ public static class PersistenceDemo
         var sessionId = "demo-session-" + Guid.NewGuid().ToString("N").Substring(0, 6);
         Console.WriteLine($"会话 ID: {sessionId}");
 
-        // 2. 添加消息
+        // 2. 添加消息 (使用 MEAI ChatMessage)
         Console.WriteLine("正在保存消息...");
-        var userMsg = new ChatMessageContent(AuthorRole.User, "你好，请把我的数据保存下来。");
-        var assistantMsg = new ChatMessageContent(AuthorRole.Assistant, "好的，我会将这些信息持久化存储。");
+        var userMsg = new ChatMessage(ChatRole.User, "你好，请把我的数据保存下来。");
+        var assistantMsg = new ChatMessage(ChatRole.Assistant, "好的，我会将这些信息持久化存储。");
 
-        await store.SaveMessageAsync(sessionId, userMsg);
-        await store.SaveMessageAsync(sessionId, assistantMsg);
+        await store.SaveMessagesAsync(sessionId, [userMsg, assistantMsg]);
 
         // 3. 读取消息
         Console.WriteLine("正在读取消息...");
@@ -41,7 +39,7 @@ public static class PersistenceDemo
         
         foreach (var msg in history)
         {
-            Console.WriteLine($"[{msg.Role}] {msg.Content}");
+            Console.WriteLine($"[{msg.Role}] {msg.Text}");
         }
 
         // 4. 清理 (可选)

@@ -1,16 +1,11 @@
 using Admin.NET.Ai.Abstractions;
-using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.ChatCompletion;
+using Microsoft.Extensions.AI;
 using System.Text;
 
 namespace Admin.NET.Ai.Services.Context;
 
 /// <summary>
-/// 智能摘要缩减器
-/// 对应需求: 5.2 智能摘要压缩器
-/// </summary>
-/// <summary>
-/// 智能摘要缩减器
+/// 智能摘要缩减器 - 实现 MEAI IChatReducer
 /// 对应需求: 5.2 智能摘要压缩器
 /// </summary>
 public class SummarizingReducer(IAiService aiService, Microsoft.Extensions.Options.IOptions<Admin.NET.Ai.Options.CompressionConfig> configOptions) : IChatReducer
@@ -18,7 +13,7 @@ public class SummarizingReducer(IAiService aiService, Microsoft.Extensions.Optio
     private readonly IAiService _aiService = aiService;
     private readonly Admin.NET.Ai.Options.CompressionConfig _config = configOptions.Value;
 
-    public async Task<IEnumerable<ChatMessageContent>> ReduceAsync(IEnumerable<ChatMessageContent> messages, CancellationToken ct = default)
+    public async Task<IEnumerable<ChatMessage>> ReduceAsync(IEnumerable<ChatMessage> messages, CancellationToken ct = default)
     {
         var msgList = messages.ToList();
         
@@ -34,8 +29,8 @@ public class SummarizingReducer(IAiService aiService, Microsoft.Extensions.Optio
         // 3. Summarize Old Messages -> 1 Summary Message
         // 4. Result = [System] + [Summary of Old] + [Recent]
 
-        var systemMessages = msgList.Where(m => m.Role == AuthorRole.System).ToList();
-        var nonSystem = msgList.Where(m => m.Role != AuthorRole.System).ToList();
+        var systemMessages = msgList.Where(m => m.Role == ChatRole.System).ToList();
+        var nonSystem = msgList.Where(m => m.Role != ChatRole.System).ToList();
 
         // 动态计算保留最近消息的数量 (例如保留阈值的 1/3)
         int keepRecent = Math.Max(2, _config.MessageCountThreshold / 3);
@@ -49,17 +44,13 @@ public class SummarizingReducer(IAiService aiService, Microsoft.Extensions.Optio
         var sb = new StringBuilder();
         foreach (var msg in toSummarize)
         {
-            sb.AppendLine($"{msg.Role}: {msg.Content}");
+            sb.AppendLine($"{msg.Role}: {msg.Text}");
         }
 
         // 注入配置中的 Prompt
         var prompt = $"{_config.SummaryPromptTemplate}\n\n{sb}";
         
         // 调用 AI 服务生成摘要
-        // 防止无限递归: IAiService 内部可能调用 Middleware pipeline。
-        // 理想情况下应跳过 Compress Middleware，此处通过 Options 传递标志或使用专门的 Client。
-        // 这里假设 IAiService 的简单调用不会无限触发 Compress 或者阈值没到。
-        // 实战中建议传递一个 "SkipCompression" 的选项给 ExecuteAsync。
         var options = new Dictionary<string, object?> { { "SkipCompression", true } };
         
         string summaryText;
@@ -72,9 +63,9 @@ public class SummarizingReducer(IAiService aiService, Microsoft.Extensions.Optio
             summaryText = $"Summary generation failed: {ex.Message}";
         }
 
-        var summaryMessage = new ChatMessageContent(AuthorRole.System, $"[Conversation Summary]: {summaryText}");
+        var summaryMessage = new ChatMessage(ChatRole.System, $"[Conversation Summary]: {summaryText}");
 
-        var result = new List<ChatMessageContent>();
+        var result = new List<ChatMessage>();
         result.AddRange(systemMessages);
         result.Add(summaryMessage);
         result.AddRange(toKeep);

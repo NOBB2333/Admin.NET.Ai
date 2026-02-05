@@ -1,26 +1,25 @@
-using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.ChatCompletion;
+using Microsoft.Extensions.AI;
 using Admin.NET.Ai.Abstractions;
 
 namespace Admin.NET.Ai.Storage;
 
 /// <summary>
-/// 对话存储抽象基类
+/// 对话存储抽象基类 (MEAI-first)
 /// 提供新增接口方法的默认实现，简化子类开发
 /// </summary>
 public abstract class ChatMessageStoreBase : IChatMessageStore
 {
     #region 抽象方法（子类必须实现）
 
-    public abstract Task<ChatHistory> GetHistoryAsync(string sessionId, CancellationToken cancellationToken = default);
-    public abstract Task SaveMessageAsync(string sessionId, ChatMessageContent message, CancellationToken cancellationToken = default);
+    public abstract Task<IList<ChatMessage>> GetHistoryAsync(string sessionId, CancellationToken cancellationToken = default);
+    public abstract Task SaveMessageAsync(string sessionId, ChatMessage message, CancellationToken cancellationToken = default);
     public abstract Task ClearHistoryAsync(string sessionId, CancellationToken cancellationToken = default);
 
     #endregion
 
     #region 批量操作（默认实现）
 
-    public virtual async Task SaveMessagesAsync(string sessionId, IEnumerable<ChatMessageContent> messages, CancellationToken cancellationToken = default)
+    public virtual async Task SaveMessagesAsync(string sessionId, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken = default)
     {
         foreach (var message in messages)
         {
@@ -28,7 +27,7 @@ public abstract class ChatMessageStoreBase : IChatMessageStore
         }
     }
 
-    public virtual async Task ReplaceHistoryAsync(string sessionId, IEnumerable<ChatMessageContent> messages, CancellationToken cancellationToken = default)
+    public virtual async Task ReplaceHistoryAsync(string sessionId, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken = default)
     {
         await ClearHistoryAsync(sessionId, cancellationToken);
         await SaveMessagesAsync(sessionId, messages, cancellationToken);
@@ -38,7 +37,7 @@ public abstract class ChatMessageStoreBase : IChatMessageStore
 
     #region 分页与查询（默认实现）
 
-    public virtual async Task<PagedResult<ChatMessageContent>> GetPagedHistoryAsync(
+    public virtual async Task<PagedResult<ChatMessage>> GetPagedHistoryAsync(
         string sessionId, 
         int pageIndex = 0, 
         int pageSize = 20, 
@@ -47,10 +46,10 @@ public abstract class ChatMessageStoreBase : IChatMessageStore
         var history = await GetHistoryAsync(sessionId, cancellationToken);
         var totalCount = history.Count;
         var items = history.Skip(pageIndex * pageSize).Take(pageSize).ToList();
-        return new PagedResult<ChatMessageContent>(items, totalCount, pageIndex, pageSize);
+        return new PagedResult<ChatMessage>(items, totalCount, pageIndex, pageSize);
     }
 
-    public virtual async Task<IReadOnlyList<ChatMessageContent>> GetRecentMessagesAsync(
+    public virtual async Task<IReadOnlyList<ChatMessage>> GetRecentMessagesAsync(
         string sessionId, 
         int count, 
         CancellationToken cancellationToken = default)
@@ -80,20 +79,17 @@ public abstract class ChatMessageStoreBase : IChatMessageStore
         int pageSize = 20, 
         CancellationToken cancellationToken = default)
     {
-        // 默认返回空列表，子类可重写提供实际实现
         return Task.FromResult(new PagedResult<SessionInfo>(
             Array.Empty<SessionInfo>(), 0, pageIndex, pageSize));
     }
 
     public virtual Task<SessionInfo?> GetSessionInfoAsync(string sessionId, CancellationToken cancellationToken = default)
     {
-        // 默认返回 null，子类可重写提供实际实现
         return Task.FromResult<SessionInfo?>(null);
     }
 
     public virtual Task UpdateSessionTitleAsync(string sessionId, string title, CancellationToken cancellationToken = default)
     {
-        // 默认不做操作，子类可重写提供实际实现
         return Task.CompletedTask;
     }
 

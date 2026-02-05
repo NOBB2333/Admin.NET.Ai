@@ -18,8 +18,7 @@ public record ClientHealthStatus(
 
 /// <summary>
 /// AI 工厂接口 (MEAI-first, 企业级标准)
-/// 职责：客户端创建、连接管理、健康检查、重试降级
-/// 注意：角色/场景配置请在调用时通过 ChatOptions.Instructions 传递
+/// 职责：客户端创建、Agent创建、连接管理、健康检查、重试降级
 /// </summary>
 public interface IAiFactory : IDisposable, IAsyncDisposable
 {
@@ -35,16 +34,11 @@ public interface IAiFactory : IDisposable, IAsyncDisposable
     /// <summary>
     /// 获取默认 Chat Client
     /// </summary>
-    /// <returns>默认 IChatClient 实例</returns>
     IChatClient? GetDefaultChatClient();
 
     /// <summary>
     /// 带重试和降级机制获取 Chat Client
     /// </summary>
-    /// <param name="name">首选配置名称</param>
-    /// <param name="fallbackNames">降级备选名称列表</param>
-    /// <param name="cancellationToken">取消令牌</param>
-    /// <returns>可用的 IChatClient 实例</returns>
     Task<IChatClient> GetChatClientWithFallbackAsync(string name, IEnumerable<string>? fallbackNames = null, CancellationToken cancellationToken = default);
 
     #endregion
@@ -54,7 +48,6 @@ public interface IAiFactory : IDisposable, IAsyncDisposable
     /// <summary>
     /// 获取所有可用的客户端配置名称
     /// </summary>
-    /// <returns>配置名称列表</returns>
     IReadOnlyList<string> GetAvailableClients();
 
     /// <summary>
@@ -65,7 +58,6 @@ public interface IAiFactory : IDisposable, IAsyncDisposable
     /// <summary>
     /// 刷新指定客户端（清除缓存，下次获取时重新创建）
     /// </summary>
-    /// <param name="name">客户端配置名称，为 null 时刷新所有客户端</param>
     void RefreshClient(string? name = null);
 
     #endregion
@@ -75,48 +67,33 @@ public interface IAiFactory : IDisposable, IAsyncDisposable
     /// <summary>
     /// 检查指定客户端的健康状态
     /// </summary>
-    /// <param name="name">客户端配置名称</param>
-    /// <param name="cancellationToken">取消令牌</param>
-    /// <returns>健康状态</returns>
     Task<ClientHealthStatus> CheckHealthAsync(string name, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 检查所有客户端的健康状态
     /// </summary>
-    /// <param name="cancellationToken">取消令牌</param>
-    /// <returns>所有客户端的健康状态</returns>
     Task<IReadOnlyList<ClientHealthStatus>> CheckAllHealthAsync(CancellationToken cancellationToken = default);
 
     #endregion
 
-    #region Agent 管理
+    #region Agent 创建 (精简为2个重载)
 
     /// <summary>
-    /// 获取 Agent (封装了 Chat Client)
+    /// 创建 Agent (指定 Client)
     /// </summary>
     /// <typeparam name="TAgent">Agent 类型 (e.g. ChatCompletionAgent)</typeparam>
-    /// <param name="name">配置名称</param>
-    /// <param name="instructions">Agent 预设指令/系统提示词</param>
-    /// <returns>Agent 实例</returns>
-    TAgent? GetAgent<TAgent>(string name, string? instructions = null) where TAgent : class;
-
-    /// <summary>
-    /// 创建 Agent (指定 Client 名称)
-    /// </summary>
     /// <param name="clientName">Client 配置名称</param>
-    /// <param name="agentName">Agent 名称</param>
-    /// <param name="instructions">预设指令</param>
-    TAgent? CreateAgent<TAgent>(string clientName, string agentName, string? instructions = null) where TAgent : class;
+    /// <param name="agentName">Agent 名称 (可选，默认使用 clientName)</param>
+    /// <param name="instructions">Agent 预设指令/系统提示词</param>
+    TAgent? CreateAgent<TAgent>(string clientName, string? agentName = null, string? instructions = null) where TAgent : class;
 
     /// <summary>
-    /// 创建使用默认 Client 的 Agent
+    /// 创建 Agent (使用默认 Client)
     /// </summary>
-    TAgent? CreateDefaultAgent<TAgent>(string agentName, string? instructions = null) where TAgent : class;
-
-    /// <summary>
-    /// 获取默认 Agent
-    /// </summary>
-    TAgent? GetDefaultAgent<TAgent>(string? instructions = null) where TAgent : class;
+    /// <typeparam name="TAgent">Agent 类型 (e.g. ChatCompletionAgent)</typeparam>
+    /// <param name="agentName">Agent 名称 (可选)</param>
+    /// <param name="instructions">Agent 预设指令/系统提示词</param>
+    TAgent? CreateDefaultAgent<TAgent>(string? agentName = null, string? instructions = null) where TAgent : class;
 
     #endregion
 

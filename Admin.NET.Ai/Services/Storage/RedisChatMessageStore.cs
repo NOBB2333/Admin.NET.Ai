@@ -1,12 +1,10 @@
 using Admin.NET.Ai.Abstractions;
-using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.ChatCompletion;
-using System.Text.Json;
+using Microsoft.Extensions.AI;
 
 namespace Admin.NET.Ai.Storage;
 
 /// <summary>
-/// Redis 分布式存储实现（继承基类）
+/// Redis 分布式存储实现（MEAI-first，继承基类）
 /// </summary>
 public class RedisChatMessageStore : ChatMessageStoreBase
 {
@@ -17,15 +15,15 @@ public class RedisChatMessageStore : ChatMessageStoreBase
         // _redis = redis;
     }
 
-    public override async Task<ChatHistory> GetHistoryAsync(string sessionId, CancellationToken cancellationToken = default)
+    public override async Task<IList<ChatMessage>> GetHistoryAsync(string sessionId, CancellationToken cancellationToken = default)
     {
         // var db = _redis.GetDatabase();
         // var json = await db.StringGetAsync($"chat:{sessionId}");
         // if (json.HasValue) { ... deserialize ... }
-        return await Task.FromResult(new ChatHistory());
+        return await Task.FromResult<IList<ChatMessage>>(new List<ChatMessage>());
     }
 
-    public override async Task SaveMessageAsync(string sessionId, ChatMessageContent message, CancellationToken cancellationToken = default)
+    public override async Task SaveMessageAsync(string sessionId, ChatMessage message, CancellationToken cancellationToken = default)
     {
         // var db = _redis.GetDatabase();
         // var item = JsonSerializer.Serialize(message);
@@ -40,4 +38,3 @@ public class RedisChatMessageStore : ChatMessageStoreBase
         await Task.CompletedTask;
     }
 }
-

@@ -1,14 +1,13 @@
 using Admin.NET.Ai.Abstractions;
 using Admin.NET.Ai.Entity;
-using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.ChatCompletion;
+using Microsoft.Extensions.AI;
 using SqlSugar;
 using System.Text.Json;
 
 namespace Admin.NET.Ai.Storage;
 
 /// <summary>
-/// 数据库存储实现（五星级企业标准）
+/// 数据库存储实现（MEAI-first 企业标准）
 /// 支持：批量操作、分页、会话管理
 /// </summary>
 public class DatabaseChatMessageStore : IChatMessageStore
@@ -22,32 +21,30 @@ public class DatabaseChatMessageStore : IChatMessageStore
 
     #region 基础操作
 
-    public async Task<ChatHistory> GetHistoryAsync(string sessionId, CancellationToken cancellationToken = default)
+    public async Task<IList<ChatMessage>> GetHistoryAsync(string sessionId, CancellationToken cancellationToken = default)
     {
         var entities = await _db.Queryable<AIChatMessage>()
             .Where(x => x.SessionId == sessionId)
             .OrderBy(x => x.CreatedTime)
             .ToListAsync(cancellationToken);
 
-        var history = new ChatHistory();
+        var history = new List<ChatMessage>();
         foreach (var entity in entities)
         {
-            if (Enum.TryParse<AuthorRole>(entity.Role, true, out var role))
-            {
-                history.AddMessage(role, entity.Content ?? string.Empty);
-            }
+            var role = ParseChatRole(entity.Role);
+            history.Add(new ChatMessage(role, entity.Content ?? string.Empty));
         }
         return history;
     }
 
-    public async Task SaveMessageAsync(string sessionId, ChatMessageContent message, CancellationToken cancellationToken = default)
+    public async Task SaveMessageAsync(string sessionId, ChatMessage message, CancellationToken cancellationToken = default)
     {
         var entity = new AIChatMessage
         {
             SessionId = sessionId,
-            Role = message.Role.ToString(),
-            Content = message.Content,
-            Metadata = message.Metadata != null ? JsonSerializer.Serialize(message.Metadata) : null,
+            Role = message.Role.Value,
+            Content = message.Text,
+            Metadata = message.AdditionalProperties != null ? JsonSerializer.Serialize(message.AdditionalProperties) : null,
         };
         
         await _db.Insertable(entity).ExecuteCommandAsync(cancellationToken);
@@ -64,22 +61,21 @@ public class DatabaseChatMessageStore : IChatMessageStore
 
     #region 批量操作
 
-    public async Task SaveMessagesAsync(string sessionId, IEnumerable<ChatMessageContent> messages, CancellationToken cancellationToken = default)
+    public async Task SaveMessagesAsync(string sessionId, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken = default)
     {
         var entities = messages.Select(m => new AIChatMessage
         {
             SessionId = sessionId,
-            Role = m.Role.ToString(),
-            Content = m.Content,
-            Metadata = m.Metadata != null ? JsonSerializer.Serialize(m.Metadata) : null,
+            Role = m.Role.Value,
+            Content = m.Text,
+            Metadata = m.AdditionalProperties != null ? JsonSerializer.Serialize(m.AdditionalProperties) : null,
         }).ToList();
 
         await _db.Insertable(entities).ExecuteCommandAsync(cancellationToken);
     }
 
-    public async Task ReplaceHistoryAsync(string sessionId, IEnumerable<ChatMessageContent> messages, CancellationToken cancellationToken = default)
+    public async Task ReplaceHistoryAsync(string sessionId, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken = default)
     {
-        // 使用事务确保原子性
         try
         {
             await _db.Ado.BeginTranAsync();
@@ -91,9 +87,9 @@ public class DatabaseChatMessageStore : IChatMessageStore
             var entities = messages.Select(m => new AIChatMessage
             {
                 SessionId = sessionId,
-                Role = m.Role.ToString(),
-                Content = m.Content,
-                Metadata = m.Metadata != null ? JsonSerializer.Serialize(m.Metadata) : null,
+                Role = m.Role.Value,
+                Content = m.Text,
+                Metadata = m.AdditionalProperties != null ? JsonSerializer.Serialize(m.AdditionalProperties) : null,
             }).ToList();
 
             if (entities.Any())
@@ -114,7 +110,7 @@ public class DatabaseChatMessageStore : IChatMessageStore
 
     #region 分页与查询
 
-    public async Task<PagedResult<ChatMessageContent>> GetPagedHistoryAsync(
+    public async Task<PagedResult<ChatMessage>> GetPagedHistoryAsync(
         string sessionId, 
         int pageIndex = 0, 
         int pageSize = 20, 
@@ -132,16 +128,13 @@ public class DatabaseChatMessageStore : IChatMessageStore
             .ToListAsync(cancellationToken);
 
         var items = entities
-            .Where(e => Enum.TryParse<AuthorRole>(e.Role, true, out _))
-            .Select(e => new ChatMessageContent(
-                Enum.Parse<AuthorRole>(e.Role!, true), 
-                e.Content ?? string.Empty))
+            .Select(e => new ChatMessage(ParseChatRole(e.Role), e.Content ?? string.Empty))
             .ToList();
 
-        return new PagedResult<ChatMessageContent>(items, totalCount, pageIndex, pageSize);
+        return new PagedResult<ChatMessage>(items, totalCount, pageIndex, pageSize);
     }
 
-    public async Task<IReadOnlyList<ChatMessageContent>> GetRecentMessagesAsync(
+    public async Task<IReadOnlyList<ChatMessage>> GetRecentMessagesAsync(
         string sessionId, 
         int count, 
         CancellationToken cancellationToken = default)
@@ -154,10 +147,7 @@ public class DatabaseChatMessageStore : IChatMessageStore
 
         return entities
             .OrderBy(e => e.CreatedTime)
-            .Where(e => Enum.TryParse<AuthorRole>(e.Role, true, out _))
-            .Select(e => new ChatMessageContent(
-                Enum.Parse<AuthorRole>(e.Role!, true), 
-                e.Content ?? string.Empty))
+            .Select(e => new ChatMessage(ParseChatRole(e.Role), e.Content ?? string.Empty))
             .ToList();
     }
 
@@ -184,7 +174,6 @@ public class DatabaseChatMessageStore : IChatMessageStore
         int pageSize = 20, 
         CancellationToken cancellationToken = default)
     {
-        // 使用分组查询获取会话信息
         var query = _db.Queryable<AIChatMessage>()
             .GroupBy(x => x.SessionId)
             .Select(x => new
@@ -239,13 +228,24 @@ public class DatabaseChatMessageStore : IChatMessageStore
 
     public async Task UpdateSessionTitleAsync(string sessionId, string title, CancellationToken cancellationToken = default)
     {
-        // 注意：当前 AIChatMessage 实体可能没有 Title 字段
-        // 如果需要此功能，需要添加独立的 Session 表或在消息表中添加字段
-        // 这里暂时不做任何操作，仅作为接口占位
         await Task.CompletedTask;
     }
 
     #endregion
+
+    #region Helper
+
+    private static ChatRole ParseChatRole(string? role)
+    {
+        return role?.ToLowerInvariant() switch
+        {
+            "system" => ChatRole.System,
+            "user" => ChatRole.User,
+            "assistant" => ChatRole.Assistant,
+            "tool" => ChatRole.Tool,
+            _ => ChatRole.User
+        };
+    }
+
+    #endregion
 }
-
-

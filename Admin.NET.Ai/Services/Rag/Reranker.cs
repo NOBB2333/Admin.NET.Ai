@@ -1,3 +1,4 @@
+using Admin.NET.Ai.Abstractions;
 using Admin.NET.Ai.Services.RAG;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;

@@ -1,7 +1,7 @@
 # 04. RAG 与 GraphRAG 混合检索
 
 ## 🎯 设计思维 (Mental Model)
-传统向量检索 (Vector RAG) 的局限性在于：它只能通过片段相似度匹配，丢失了实体间的语义逻辑。例如，“张三是李四的哥哥”，在向量空间中这两点可能很近，但 LLM 很难直接推断出“李四是张三的弟弟”这种关系型知识。
+传统向量检索 (Vector RAG) 的局限性在于：它只能通过片段相似度匹配，丢失了实体间的语义逻辑。例如，"张三是李四的哥哥"，在向量空间中这两点可能很近，但 LLM 很难直接推断出"李四是张三的弟弟"这种关系型知识。
 
 `Admin.NET.Ai` 引入了 **混合 RAG** 架构：
 1.  **Vector RAG**: 负责处理非结构化文本的模糊匹配。
@@ -11,41 +11,80 @@
 
 ## 🏗️ 架构设计
 ### 核心组件
-- **`IRagService`**: 基础 RAG 服务，管理向量索引的注入与检索。
-- **`IGraphRagService`**: 专门负责图数据库 (Neo4j) 的操作。
-- **`RagStrategyFactory`**: 内置了 21 种 RAG 策略，可根据查询复杂度自动选择（如：Simple, HyDE, Multi-hop）。
+- **`IRagService`**: 基础 RAG 服务接口 - 向量检索 + 索引
+- **`IGraphRagService`**: 继承 `IRagService`，扩展图谱检索能力
+- **`RagStrategyFactory`**: 内置 21 种 RAG 策略
+
+### 核心接口 (2026-02 更新)
+
+```csharp
+// IRagService - 基础向量检索
+public interface IRagService
+{
+    Task<RagSearchResult> SearchAsync(
+        string query, 
+        RagSearchOptions? options = null, 
+        CancellationToken cancellationToken = default);
+    
+    Task IndexAsync(
+        IEnumerable<RagDocument> documents, 
+        string? collection = null, 
+        CancellationToken cancellationToken = default);
+}
+
+// IGraphRagService - 继承 IRagService，扩展图谱检索
+public interface IGraphRagService : IRagService
+{
+    Task<RagSearchResult> GraphSearchAsync(
+        string query, 
+        GraphRagSearchOptions? options = null, 
+        CancellationToken cancellationToken = default);
+
+    Task BuildGraphAsync(
+        IEnumerable<RagDocument> documents, 
+        CancellationToken cancellationToken = default);
+}
+
+// 返回类型
+public record RagSearchResult(
+    IReadOnlyList<RagDocument> Documents,
+    TimeSpan ElapsedTime
+);
+
+public record RagDocument(
+    string Content,
+    double Score = 0,
+    string? Source = null,
+    IDictionary<string, object>? Metadata = null
+);
+```
 
 ---
 
 ## 🛠️ 技术实现 (Implementation)
 
-### 1. 依赖库
-- `Neo4j.Driver`: 连接 Neo4j 图数据库。
-- `Microsoft.SemanticKernel.Connectors.Memory.*`: 提供向量数据库（如 Chroma, Qdrant）的支持。
-
-### 2. GraphRAG 实现细节 (`Services/Rag/GraphRagService.cs`)
-系统利用 Cypher 语言对图数据进行深度遍历。
+### Options 配置类 (`Options/RagOptions.cs`)
 
 ```csharp
-public async Task<List<string>> SearchAsync(string query, RagSearchOptions? options = null)
+// 基础 RAG 选项
+public class RagSearchOptions
 {
-    // 1. 检查配置是否启用 Neo4j
-    var neo4jConfig = _options.LLMGraphRag.GraphDatabase;
-    
-    // 2. 建立会话并运行 Cypher 查询
-    await using var session = _driver.AsyncSession();
-    
-    // 示例代码：查找包含关键词的文档节点
-    // 在高级实现中，这会包含 "3跳" 路径查询 (Match (n)-[*1..3]-(m))
-    var cypher = "MATCH (n:Document) WHERE n.content CONTAINS $query RETURN n.content AS content LIMIT 5";
-    var cursor = await session.RunAsync(cypher, new { query });
-    
-    return await cursor.ToListAsync(record => record["content"].As<string>());
+    public RagStrategy Strategy { get; set; } = RagStrategy.Auto;
+    public int TopK { get; set; } = 3;
+    public double ScoreThreshold { get; set; } = 0.5;
+    public bool EnableRerank { get; set; } = true;
+    public string? RerankModel { get; set; }
+    public string? CollectionName { get; set; }
+}
+
+// Graph RAG 扩展选项 (继承 RagSearchOptions)
+public class GraphRagSearchOptions : RagSearchOptions
+{
+    public int MaxHops { get; set; } = 2;
+    public bool IncludeRelations { get; set; } = true;
+    public bool HybridFusion { get; set; } = true;
 }
 ```
-
-### 3. 重排 (Rerank)
-检索出来的结果往往包含噪音。管道支持接入 `BGE-Reranker` 等模型，对召回的结果进行二次精细化打分排序。
 
 ---
 
@@ -53,17 +92,41 @@ public async Task<List<string>> SearchAsync(string query, RagSearchOptions? opti
 
 ### 基础 RAG 检索
 ```csharp
-// 注入 IRagService
-var ragService = serviceProvider.GetRequiredService<IRagService>();
+var ragService = sp.GetRequiredService<IRagService>();
 
-// 执行检索 (内部自动根据策略选择 Vector 还是 Graph)
-var contexts = await ragService.RetrieveContextAsync("Admin.NET 的作者是谁？");
+// 索引文档
+await ragService.IndexAsync([
+    new RagDocument("Admin.NET.Ai 是一个 .NET AI 开发框架"),
+    new RagDocument("GraphRAG 结合了知识图谱和向量检索")
+]);
+
+// 执行检索
+var result = await ragService.SearchAsync("Admin.NET 是什么?");
+foreach (var doc in result.Documents)
+{
+    Console.WriteLine($"[{doc.Score:F2}] {doc.Content}");
+}
 ```
 
-### GraphRAG 数据注入
+### GraphRAG 图谱检索
 ```csharp
-// 插入一段事实
-await graphRagService.InsertAsync("Admin.NET 开源项目的核心贡献者包括 zhangsan 等人。");
+var graphRagService = sp.GetRequiredService<IGraphRagService>();
+
+// 图谱增强检索 (自动关联相关实体)
+var result = await graphRagService.GraphSearchAsync("Admin.NET 的作者", new GraphRagSearchOptions
+{
+    MaxHops = 2,
+    IncludeRelations = true
+});
+
+foreach (var doc in result.Documents)
+{
+    Console.WriteLine($"[{doc.Score:F2}] {doc.Content}");
+    if (doc.Metadata?.TryGetValue("RelatedContents", out var related) == true)
+    {
+        Console.WriteLine($"  └─ Related: {related}");
+    }
+}
 ```
 
 ---
@@ -78,10 +141,10 @@ await graphRagService.InsertAsync("Admin.NET 开源项目的核心贡献者包�
       "Username": "neo4j",
       "Password": "password"
     },
-    "Search": {
-      "Strategy": "MultiHop",
-      "MaxNodes": 20,
-      "Depth": 3
+    "Query": {
+      "MaxDepth": 2,
+      "ExpandRelations": true,
+      "HybridFusion": true
     }
   }
 }
@@ -89,7 +152,14 @@ await graphRagService.InsertAsync("Admin.NET 开源项目的核心贡献者包�
 
 ---
 
-## 💡 RAG 策略列表 (Partial)
-- **Simple**: 基础 TopK 检索。
-- **HyDE (Hypothetical Document Embeddings)**: 通过模型先生成伪答案，再用伪答案查库，大幅提升中英文语义匹配准确度。
-- **GraphAnalysis**: 利用 Neo4j 的社区发现算法分析全局知识。
+## 💡 RAG 策略列表 (21 种)
+| 策略 | 说明 |
+|------|------|
+| Naive | 朴素 RAG (TopK 检索) |
+| Advanced | 高级 RAG (Pre/Post-retrieval) |
+| SentenceWindow | 句子窗口检索 |
+| HyDE | 假设性文档嵌入 |
+| Graph | 图谱增强 (GraphRAG) |
+| Hybrid | 混合检索 (Vector + Keyword + Graph) |
+| ReRank | 重排序 |
+| Agentic | Agent 驱动 RAG |

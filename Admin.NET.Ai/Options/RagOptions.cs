@@ -63,3 +63,28 @@ public class RagSearchOptions
     /// </summary>
     public string? CollectionName { get; set; }
 }
+
+/// <summary>
+/// Graph RAG 检索选项 (扩展 RagSearchOptions)
+/// 对应配置: LLMAgent.Rag.json -> LLM-GraphRag -> Query
+/// </summary>
+public class GraphRagSearchOptions : RagSearchOptions
+{
+    /// <summary>
+    /// 图谱遍历最大跳数
+    /// 对应配置: LLM-GraphRag.Query.MaxDepth
+    /// </summary>
+    public int MaxHops { get; set; } = 2;
+    
+    /// <summary>
+    /// 是否包含关系信息
+    /// 对应配置: LLM-GraphRag.Query.ExpandRelations
+    /// </summary>
+    public bool IncludeRelations { get; set; } = true;
+    
+    /// <summary>
+    /// 是否启用混合融合检索
+    /// 对应配置: LLM-GraphRag.Query.HybridFusion
+    /// </summary>
+    public bool HybridFusion { get; set; } = true;
+}

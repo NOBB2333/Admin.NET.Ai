@@ -79,7 +79,7 @@ public class TelemetryMiddleware : DelegatingChatClient
     public override async Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages,
         ChatOptions? options = null,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
         using var activity = AgentTelemetry.StartActivity("chat_completion", new Dictionary<string, object?>
         {

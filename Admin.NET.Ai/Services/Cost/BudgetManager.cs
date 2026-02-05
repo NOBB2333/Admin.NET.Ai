@@ -14,12 +14,12 @@ public class BudgetManager : IBudgetManager
         _logger = logger;
     }
 
-    public async Task<BudgetCheckResult> CheckBudgetAsync(string userId, string modelName)
+    public async Task<BudgetCheckResult> CheckBudgetAsync(string userId, string modelName, CancellationToken cancellationToken = default)
     {
-        var budget = await _budgetStore.GetUserBudgetAsync(userId, modelName) 
+        var budget = await _budgetStore.GetUserBudgetAsync(userId, modelName, cancellationToken) 
                      ?? CreateDefaultBudget(userId, modelName);
 
-        var currentUsage = await _budgetStore.GetCurrentUsageAsync(userId, modelName);
+        var currentUsage = await _budgetStore.GetCurrentUsageAsync(userId, modelName, cancellationToken);
 
         return new BudgetCheckResult
         {
@@ -30,12 +30,12 @@ public class BudgetManager : IBudgetManager
         };
     }
 
-    public async Task<BudgetStatus> GetBudgetStatusAsync(string userId, string modelName)
+    public async Task<BudgetStatus> GetBudgetStatusAsync(string userId, string modelName, CancellationToken cancellationToken = default)
     {
-        var budget = await _budgetStore.GetUserBudgetAsync(userId, modelName) 
+        var budget = await _budgetStore.GetUserBudgetAsync(userId, modelName, cancellationToken) 
                      ?? CreateDefaultBudget(userId, modelName);
 
-        var usage = await _budgetStore.GetCurrentUsageAsync(userId, modelName);
+        var usage = await _budgetStore.GetCurrentUsageAsync(userId, modelName, cancellationToken);
 
         return new BudgetStatus
         {
@@ -49,14 +49,13 @@ public class BudgetManager : IBudgetManager
         };
     }
 
-    public async Task RecordUsageAsync(string userId, string modelName, decimal amount)
+    public async Task RecordUsageAsync(string userId, string modelName, decimal amount, CancellationToken cancellationToken = default)
     {
-        await _budgetStore.RecordUsageAsync(userId, modelName, amount);
+        await _budgetStore.RecordUsageAsync(userId, modelName, amount, cancellationToken);
 
-        var status = await GetBudgetStatusAsync(userId, modelName);
+        var status = await GetBudgetStatusAsync(userId, modelName, cancellationToken);
         if (status.UsagePercentage >= 0.9m)
         {
-            // Log alert
             _logger.LogWarning("🔔 用户 {UserId} {Model} 预算使用已达 {Percentage:P0}", 
                 userId, modelName, status.UsagePercentage);
         }

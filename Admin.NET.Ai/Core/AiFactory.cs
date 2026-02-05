@@ -347,11 +347,14 @@ public class AiFactory : IAiFactory
         return ActivatorUtilities.CreateInstance<Core.Adapters.UriImageAdapter>(_serviceProvider, innerClient);
     }
 
-    public TAgent? CreateAgent<TAgent>(string clientName, string agentName, string? instructions = null) where TAgent : class
+    public TAgent? CreateAgent<TAgent>(string clientName, string? agentName = null, string? instructions = null) where TAgent : class
     {
          // 1. 获取底层 ChatClient (通过配置名称)
          var client = GetChatClient(clientName);
          if (client == null) return null;
+         
+         // Agent 名称默认使用 clientName
+         agentName ??= clientName;
 
          // 2. 处理 Microsoft.Agents.AI.ChatCompletionAgent (MAF)
          // 假设 TAgent 是或者继承自 Microsoft.Agents.AI.Agent
@@ -377,16 +380,7 @@ public class AiFactory : IAiFactory
                  {
                     var type = typeof(TAgent);
                     
-                     // 1. 设置 ChatClient (MEAI) - 如果通过构造函数传递则是多余的，但是是安全的
-                     // 使用 SetAgentProperty 助手以避免只读异常
-                     // 1. 设置 ChatClient (MEAI) - 如果通过构造函数传递则是多余的，但是是安全的
-                     // 使用 SetAgentProperty 助手以避免只读异常
-                     /* (Removed Reflection)
-                     var clientPropName = (type.GetProperty("ChatClient") != null) ? "ChatClient" : "Client";
-                     SetAgentProperty(agent, clientPropName, client);
-                     */
-                    
-                     // 2. 设置名称和指令 (显式属性赋值)
+                     // 设置名称和指令 (显式属性赋值)
                      if (agent is Admin.NET.Ai.Agents.BuiltIn.SentimentAnalysisAgent sentimentAgent)
                      {
                          sentimentAgent.Name = agentName;
@@ -394,12 +388,6 @@ public class AiFactory : IAiFactory
                          {
                              sentimentAgent.Instructions = instructions;
                          }
-                     }
-                     // 对于 Microsoft.Agents.AI.ChatClientAgent
-                     else if (agent is Microsoft.Agents.AI.ChatClientAgent maAgent)
-                     {
-                         // MAF Agent 通常有 Name 属性
-                         // maAgent.Name = agentName; 
                      }
                      
                      return agent;
@@ -418,26 +406,13 @@ public class AiFactory : IAiFactory
  
 
  
-
-    public TAgent? CreateDefaultAgent<TAgent>(string agentName, string? instructions = null) where TAgent : class
+    public TAgent? CreateDefaultAgent<TAgent>(string? agentName = null, string? instructions = null) where TAgent : class
     {
         var defaultProvider = _options.DefaultProvider;
         if (string.IsNullOrEmpty(defaultProvider)) return null;
         return CreateAgent<TAgent>(defaultProvider, agentName, instructions);
     }
 
-    public TAgent? GetAgent<TAgent>(string name, string? instructions = null) where TAgent : class
-    {
-         // 遗留行为：代理名称 == 客户端配置名称
-         return CreateAgent<TAgent>(name, name, instructions);
-    }
-
-    public TAgent? GetDefaultAgent<TAgent>(string? instructions = null) where TAgent : class
-    {
-        var defaultProvider = _options.DefaultProvider;
-        if (string.IsNullOrEmpty(defaultProvider)) return null;
-        return GetAgent<TAgent>(defaultProvider, instructions);
-    }
     public T? GetDefaultClient<T>() where T : class
     {
         var defaultProvider = _options.DefaultProvider;

@@ -1,64 +1,40 @@
-using Microsoft.SemanticKernel;
+using Microsoft.Extensions.AI;
 
 namespace Admin.NET.Ai.Abstractions;
 
 /// <summary>
-/// 会话管理服务接口（五星级企业标准）
-/// 支持：线程隔离、压缩集成、完整会话管理
+/// 会话编排服务接口（MEAI-first 企业标准）
+/// 职责：上下文构建、对话保存、历史压缩
+/// 
+/// 注意：会话/消息查询请直接使用 IChatMessageStore
 /// </summary>
 public interface IConversationService
 {
-    #region 基础操作
+    /// <summary>
+    /// 构建完整对话上下文 (历史 + 压缩 + 用户消息)
+    /// </summary>
+    /// <param name="sessionId">会话ID</param>
+    /// <param name="userMessage">用户消息</param>
+    /// <param name="compress">是否压缩历史</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>完整的消息列表，可直接发送给 LLM</returns>
+    Task<IList<ChatMessage>> BuildContextAsync(
+        string sessionId, 
+        ChatMessage userMessage, 
+        bool compress = true, 
+        CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// 获取或创建会话上下文
+    /// 保存一轮对话 (用户消息 + AI响应)
     /// </summary>
-    Task<IAiContext> GetContextAsync(string sessionId, CancellationToken cancellationToken = default);
-    
-    /// <summary>
-    /// 保存会话
-    /// </summary>
-    Task SaveContextAsync(string sessionId, IAiContext context, CancellationToken cancellationToken = default);
-    
-    /// <summary>
-    /// 删除会话
-    /// </summary>
-    Task DeleteContextAsync(string sessionId, CancellationToken cancellationToken = default);
-
-    #endregion
-
-    #region 增强功能
-
-    /// <summary>
-    /// 获取历史记录
-    /// </summary>
-    Task<IEnumerable<ChatMessageContent>> GetHistoryAsync(string sessionId, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// 获取并压缩历史记录（如果配置了压缩器）
-    /// </summary>
-    Task<IEnumerable<ChatMessageContent>> GetCompressedHistoryAsync(string sessionId, CancellationToken cancellationToken = default);
+    Task SaveTurnAsync(
+        string sessionId, 
+        ChatMessage userMessage, 
+        ChatMessage assistantMessage, 
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 压缩并持久化历史记录
     /// </summary>
-    Task CompressAndSaveHistoryAsync(string sessionId, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// 获取会话信息
-    /// </summary>
-    Task<SessionInfo?> GetSessionInfoAsync(string sessionId, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// 获取所有会话列表
-    /// </summary>
-    Task<PagedResult<SessionInfo>> GetSessionsAsync(int pageIndex = 0, int pageSize = 20, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// 更新会话标题
-    /// </summary>
-    Task UpdateSessionTitleAsync(string sessionId, string title, CancellationToken cancellationToken = default);
-
-    #endregion
+    Task CompressAndSaveAsync(string sessionId, CancellationToken cancellationToken = default);
 }
-

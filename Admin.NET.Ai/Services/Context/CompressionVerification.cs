@@ -3,8 +3,7 @@ using Admin.NET.Ai.Services.Context;
 using Admin.NET.Ai.Options;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
-using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.ChatCompletion;
+using Microsoft.Extensions.AI;
 
 namespace Admin.NET.Ai.Services.Context;
 
@@ -22,20 +21,20 @@ public class CompressionVerification
         var systemProtector = services.GetRequiredService<SystemMessageProtectionReducer>();
         var functionProtector = services.GetRequiredService<FunctionCallPreservationReducer>();
 
-        // 构造测试消息
-        var messages = new List<ChatMessageContent>
+        // 构造测试消息 (MEAI ChatMessage)
+        var messages = new List<ChatMessage>
         {
-            new(AuthorRole.System, "You are a helpful assistant."),
-            new(AuthorRole.User, "My order number is #12345."),
-            new(AuthorRole.Assistant, "Checking your order..."),
-            new(AuthorRole.User, "Any update on the payment?"), // Contains 'payment' (支付/payment need keyword check)
-            new(AuthorRole.Assistant, "Payment failed."),
-            new(AuthorRole.User, "Please retry."),
-            new(AuthorRole.Assistant, "Retrying..."),
-            // Function Call simulation (Semantic Kernel items)
-            new(AuthorRole.Assistant, [new FunctionCallContent("CheckStatus", "OrderPlugin", "call_123", new KernelArguments(){{"id","123"}})]),
-            new(AuthorRole.Tool, [new FunctionResultContent("CheckStatus", "OrderPlugin", "call_123", "Status: Shipped")]),
-            new(AuthorRole.Assistant, "Your order #12345 is shipped.")
+            new(ChatRole.System, "You are a helpful assistant."),
+            new(ChatRole.User, "My order number is #12345."),
+            new(ChatRole.Assistant, "Checking your order..."),
+            new(ChatRole.User, "Any update on the payment?"),
+            new(ChatRole.Assistant, "Payment failed."),
+            new(ChatRole.User, "Please retry."),
+            new(ChatRole.Assistant, "Retrying..."),
+            // Function Call simulation (MEAI FunctionCallContent)
+            new(ChatRole.Assistant, [new FunctionCallContent("call_123", "CheckStatus", new Dictionary<string, object?>{ {"id","123"} })]),
+            new(ChatRole.Tool, [new FunctionResultContent("call_123", "Status: Shipped")]),
+            new(ChatRole.Assistant, "Your order #12345 is shipped.")
         };
 
         Console.WriteLine($"Original Count: {messages.Count}");
@@ -45,8 +44,7 @@ public class CompressionVerification
         Console.WriteLine($"\nCounting (Threshold 5): {res1.Count()} messages");
         PrintMessages(res1);
 
-        // 2. Keyword Reducer (Keywords: 订单, 支付)
-        // Adjust config temporarily for demo
+        // 2. Keyword Reducer (Keywords: order, payment)
         config.CriticalKeywords = ["order", "payment", "shipped"];
         var res2 = await keywordReducer.ReduceAsync(messages);
         Console.WriteLine($"\nKeyword (Protect 'order', 'payment', 'shipped'): {res2.Count()} messages");
@@ -54,11 +52,7 @@ public class CompressionVerification
 
         // 3. System Protection (Just splits)
         var res3 = await systemProtector.ReduceAsync(messages);
-        Console.WriteLine($"\nSystem Protection (Inner=Counting): {res3.Count()} messages (Preserves System + Inner logic)");
-        // Note: SystemProtector uses InnerReducer provided in constructor or DI? 
-        // In my implementation, SystemMessageProtectionReducer uses an injected IChatReducer.
-        // It likely injected AdaptiveCompressionReducer or MessageCountingReducer depending on DI.
-        // Let's assume it works.
+        Console.WriteLine($"\nSystem Protection (Inner=Counting): {res3.Count()} messages");
         PrintMessages(res3);
 
         // 4. Function Call Protection
@@ -67,12 +61,12 @@ public class CompressionVerification
         PrintMessages(res4);
     }
 
-    private static void PrintMessages(IEnumerable<ChatMessageContent> msgs)
+    private static void PrintMessages(IEnumerable<ChatMessage> msgs)
     {
         foreach (var m in msgs)
         {
-            var content = m.Content;
-            if (string.IsNullOrEmpty(content) && m.Items.Count > 0) content = "[Complex Items]";
+            var content = m.Text;
+            if (string.IsNullOrEmpty(content) && m.Contents.Count > 0) content = "[Complex Items]";
             Console.WriteLine($" - [{m.Role}] {content}");
         }
     }

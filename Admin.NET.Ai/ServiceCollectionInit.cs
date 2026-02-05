@@ -17,7 +17,6 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.AI;
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Configuration;
-using IChatReducer = Admin.NET.Ai.Abstractions.IChatReducer;
 
 // 用于 CSharpScriptEngine，如果没有移动？我移动了它。
 // using Admin.NET.Ai.Services.Workflow.Checkpoint;
@@ -99,15 +98,13 @@ public static class ServiceCollectionInit
         
         // 2. 注册存储 (默认内存，实际可配置)
         services.TryAddSingleton<IChatMessageStore, InMemoryChatMessageStore>();
-        services.TryAddSingleton<ICostStore, InMemoryCostStore>();
         services.TryAddSingleton<IAuditStore, InMemoryAuditStore>();
 
         // 3. 注册中间件
-        // 3.1 新的 Agent 运行中间件和依赖项 (MEAI 风格)
-        services.TryAddSingleton<ICostCalculator, ModelCostCalculator>();
-        services.TryAddSingleton<IBudgetManager, BudgetManager>();
-                services.TryAddSingleton<ITokenUsageStore, InMemoryTokenUsageStore>();
+        // 3.1 Token使用与成本管理 (合并接口: ITokenUsageStore 包含 CalculateCost)
+        services.TryAddSingleton<ITokenUsageStore, InMemoryTokenUsageStore>();
         services.TryAddSingleton<IBudgetStore, InMemoryBudgetStore>();
+        services.TryAddSingleton<IBudgetManager, BudgetManager>();
         services.TryAddSingleton<IRateLimiter, Admin.NET.Ai.Services.TokenBucketRateLimiter>();
         
         // 3.2 语义缓存 (简单关键词版)
@@ -135,9 +132,10 @@ public static class ServiceCollectionInit
         services.TryAddSingleton<Admin.NET.Ai.Services.MCP.McpServerService>();
 
 
-        // RAG
-        services.TryAddScoped<IGraphRagService, GraphRagService>();
-        services.TryAddScoped<IRagService, RagService>();
+        // RAG - GraphRagService 同时实现 IRagService 和 IGraphRagService
+        services.TryAddScoped<GraphRagService>();
+        services.TryAddScoped<IGraphRagService>(sp => sp.GetRequiredService<GraphRagService>());
+        services.TryAddScoped<IRagService>(sp => sp.GetRequiredService<GraphRagService>());
         services.TryAddSingleton<RagStrategyFactory>();
         
         // RAG 增强组件
@@ -203,8 +201,7 @@ public static class ServiceCollectionInit
         services.TryAddSingleton<VectorChatMessageStore>();
         services.TryAddSingleton<CosmosDBChatMessageStore>();
         
-        // MAF 存储 (Microsoft Agent Framework)
-        services.TryAddScoped<IAgentChatMessageStore, DatabaseAgentChatMessageStore>();
+        // MAF 适配器使用统一的 IChatMessageStore，无需单独注册
         
         // 基于配置的动态注册 (基于 SK)
         services.AddSingleton<IChatMessageStore>(sp => 
@@ -251,15 +248,6 @@ public static class ServiceCollectionInit
     }
 }
 
-
-// 简单的 Mock 实现，避免编译错误
-public class InMemoryCostStore : ICostStore
-{
-    public Task SaveCostAsync(string requestId, int inputTokens, int outputTokens, string model, IDictionary<string, object?>? additionalData = null)
-    {
-        return Task.CompletedTask;
-    }
-}
 
 public class InMemoryAuditStore : IAuditStore
 {

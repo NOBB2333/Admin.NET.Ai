@@ -1,6 +1,4 @@
-using Microsoft.Extensions.AI;
-
-namespace Admin.NET.Ai.Services.RAG;
+namespace Admin.NET.Ai.Abstractions;
 
 public interface ITextSearchProvider
 {

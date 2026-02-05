@@ -4,6 +4,8 @@
         <TargetFramework>net10.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
+        <!-- 抑制 MEAI 实验性 API 警告 -->
+        <NoWarn>$(NoWarn);MEAI001</NoWarn>
     </PropertyGroup>
 
     <ItemGroup>

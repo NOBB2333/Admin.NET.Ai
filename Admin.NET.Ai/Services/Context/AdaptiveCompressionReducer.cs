@@ -1,12 +1,11 @@
-using Admin.NET.Ai.Abstractions;
 using Admin.NET.Ai.Options;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
-using Microsoft.SemanticKernel;
 
 namespace Admin.NET.Ai.Services.Context;
 
 /// <summary>
-/// 自适应压缩策略
+/// 自适应压缩策略 - 实现 MEAI IChatReducer
 /// 对应需求: 5.7 压缩触发策略
 /// </summary>
 public class AdaptiveCompressionReducer(
@@ -17,17 +16,13 @@ public class AdaptiveCompressionReducer(
     ) : IChatReducer
 {
     private readonly CompressionConfig _config = configOptions.Value;
-    
-    // 注入不同的策略实现
     private readonly MessageCountingReducer _lightReducer = lightReducer;
     private readonly SummarizingReducer _mediumReducer = mediumReducer;
     
-    // 在构造时可以区分，或者复用。这里简单起见复用，实际可以注入 HeavyCompressionReducer
-    
-    public async Task<IEnumerable<ChatMessageContent>> ReduceAsync(IEnumerable<ChatMessageContent> messages, CancellationToken ct = default)
+    public async Task<IEnumerable<ChatMessage>> ReduceAsync(IEnumerable<ChatMessage> messages, CancellationToken ct = default)
     {
         var messageList = messages.ToList();
-        var totalTokens = EstimateTokens(messageList); // 估算
+        var totalTokens = EstimateTokens(messageList);
         
         bool shouldCompress = CheckCompressionConditions(messageList, totalTokens);
         
@@ -40,25 +35,20 @@ public class AdaptiveCompressionReducer(
         {
             CompressionLevel.Light => await _lightReducer.ReduceAsync(messageList, ct),
             CompressionLevel.Medium => await _mediumReducer.ReduceAsync(messageList, ct),
-            CompressionLevel.Heavy => await _mediumReducer.ReduceAsync(messageList, ct), // 暂时复用 Medium
+            CompressionLevel.Heavy => await _mediumReducer.ReduceAsync(messageList, ct),
             _ => messageList
         };
     }
     
-    private bool CheckCompressionConditions(List<ChatMessageContent> messages, int totalTokens)
+    private bool CheckCompressionConditions(List<ChatMessage> messages, int totalTokens)
     {
         if (messages.Count > _config.MessageCountThreshold) return true;
         if (totalTokens > _config.TokenCountThreshold) return true;
-        
-        // 简单的时间检查 (需要 Metadata 支持，暂时略过或假设第一条是开始时间)
-        // var duration = ...
-        
         return false;
     }
 
     private CompressionLevel DetermineCompressionLevel(int count, int tokens)
     {
-        // 简单的分级逻辑
         if (count > _config.MessageCountThreshold * 2 || tokens > _config.TokenCountThreshold * 2)
             return CompressionLevel.Heavy;
             
@@ -68,16 +58,15 @@ public class AdaptiveCompressionReducer(
         return CompressionLevel.Light;
     }
 
-    // 简单字符估算，1 token ~= 4 chars (英文) or 1 char (中文)
-    // 这里简单按 1 char = 1 token 估算中文环境，或 0.5
-    private int EstimateTokens(List<ChatMessageContent> messages)
+    private int EstimateTokens(List<ChatMessage> messages)
     {
         int chars = 0;
         foreach(var m in messages)
         {
-             if (m.Content != null) chars += m.Content.Length;
+            var text = m.Text;
+            if (text != null) chars += text.Length;
         }
-        return chars / 2; // 粗略估算
+        return chars / 2;
     }
 
     private enum CompressionLevel { Light, Medium, Heavy }

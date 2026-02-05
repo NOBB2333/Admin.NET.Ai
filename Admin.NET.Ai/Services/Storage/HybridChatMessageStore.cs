@@ -1,13 +1,12 @@
 using Admin.NET.Ai.Abstractions;
-using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.ChatCompletion;
+using Microsoft.Extensions.AI;
 using Admin.NET.Ai.Storage;
 using Microsoft.Extensions.Logging;
 
 namespace Admin.NET.Ai.Services.Storage;
 
 /// <summary>
-/// 混合聊天消息存储 (Redis + Database)
+/// 混合聊天消息存储 (Redis + Database) - MEAI-first
 /// </summary>
 public class HybridChatMessageStore : ChatMessageStoreBase
 {
@@ -25,7 +24,7 @@ public class HybridChatMessageStore : ChatMessageStoreBase
         _logger = logger;
     }
 
-    public override async Task<ChatHistory> GetHistoryAsync(string sessionId, CancellationToken cancellationToken = default)
+    public override async Task<IList<ChatMessage>> GetHistoryAsync(string sessionId, CancellationToken cancellationToken = default)
     {
         // 1. 尝试从 Redis 获取 (热数据)
         try 
@@ -45,17 +44,12 @@ public class HybridChatMessageStore : ChatMessageStoreBase
         // 2. 从数据库获取 (冷数据)
         var dbHistory = await _dbStore.GetHistoryAsync(sessionId, cancellationToken);
         
-        // 3. 回填 Redis
-        if (dbHistory.Count > 0)
-        {
-            // 此处需要批量保存接口，或简单的循环保存 (暂略)
-            // await _redisStore.SaveHistoryAsync(sessionId, dbHistory); 
-        }
+        // 3. 回填 Redis (略)
 
         return dbHistory;
     }
 
-    public override async Task SaveMessageAsync(string sessionId, ChatMessageContent message, CancellationToken cancellationToken = default)
+    public override async Task SaveMessageAsync(string sessionId, ChatMessage message, CancellationToken cancellationToken = default)
     {
         // 双写：先写 DB 保证持久化，再写 Redis 保证高性能
         await _dbStore.SaveMessageAsync(sessionId, message, cancellationToken);
@@ -67,7 +61,6 @@ public class HybridChatMessageStore : ChatMessageStoreBase
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Redis 写入失败: {SessionId}", sessionId);
-            // Redis 失败不影响主流程
         }
     }
 
