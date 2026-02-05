@@ -64,14 +64,24 @@
     },
     "LLM-CostControl": {
         "Enabled": true,
-        "DailyBudget": 1000,
-        "MonthlyBudget": 30000,
+        "Token": {
+            "DailyLimit": 10000000,
+            "MonthlyLimit": 100000000,
+            "TotalLimit": 0
+        },
+        "Budget": {
+            "DailyLimit": 1000,
+            "MonthlyLimit": 30000,
+            "TotalLimit": 0
+        },
         "RateLimiting": {
             "MaxRequestsPerMinute": 60,
-            "MaxTokensPerDay": 10000000
+            "MaxConcurrentRequests": 10,
+            "TokensPerSecond": 10,
+            "BucketCapacity": 100
         },
         "OverBudgetApproval": {
-            "Enabled": true,
+            "Enabled": false,
             "MaxApprovalAmount": 500,
             "ApprovalExpiryHours": 24,
             "RequireApproval": true
@@ -80,11 +90,6 @@
             "Enabled": true,
             "Threshold": 0.8,
             "Email": "admin@example.com"
-        },
-        "CostTracking": {
-            "Enabled": true,
-            "Storage": "Database",
-            "RetentionDays": 90
         }
     },
     "LLM-Capabilities": {

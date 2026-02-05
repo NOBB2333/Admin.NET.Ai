@@ -120,7 +120,7 @@ public sealed class DocumentStorageConfig
 }
 
 /// <summary>
-/// LLM 成本控制配置
+/// LLM 成本控制配置 (含配额管理)
 /// </summary>
 [OptionsSettings("LLM-CostControl")]
 public sealed class LLMCostControlConfig : IConfigurableOptions
@@ -128,35 +128,68 @@ public sealed class LLMCostControlConfig : IConfigurableOptions
     /// <summary> 是否启用成本控制 </summary>
     public bool Enabled { get; set; } = true;
 
-    /// <summary> 每日预算（元） </summary>
-    public decimal DailyBudget { get; set; } = 1000;
+    /// <summary> Token 配额配置 (多周期) </summary>
+    public TokenQuotaConfig Token { get; set; } = new();
 
-    /// <summary> 每月预算（元） </summary>
-    public decimal MonthlyBudget { get; set; } = 30000;
+    /// <summary> 预算配额配置 (多周期) </summary>
+    public BudgetQuotaConfig Budget { get; set; } = new();
 
     /// <summary> 限流配置 </summary>
-    public CostRateLimitingConfig RateLimiting { get; set; } = new();
+    public RateLimitConfig RateLimiting { get; set; } = new();
 
     /// <summary> 超预算审批配置 </summary>
     public OverBudgetApprovalConfig OverBudgetApproval { get; set; } = new();
 
     /// <summary> 告警配置 </summary>
     public CostAlertConfig Alerts { get; set; } = new();
-
-    /// <summary> 成本追踪配置 </summary>
-    public CostTrackingConfig CostTracking { get; set; } = new();
 }
 
 /// <summary>
-/// 成本限流配置
+/// Token 配额配置 (多周期)
 /// </summary>
-public sealed class CostRateLimitingConfig
+public sealed class TokenQuotaConfig
+{
+    /// <summary> 每日 Token 限额 (0 = 不限制) </summary>
+    public long DailyLimit { get; set; } = 10_000_000;
+    
+    /// <summary> 每月 Token 限额 (0 = 不限制) </summary>
+    public long MonthlyLimit { get; set; } = 100_000_000;
+    
+    /// <summary> 总 Token 限额 (0 = 不限制) </summary>
+    public long TotalLimit { get; set; } = 0;
+}
+
+/// <summary>
+/// 预算配额配置 (多周期)
+/// </summary>
+public sealed class BudgetQuotaConfig
+{
+    /// <summary> 每日预算限额 (0 = 不限制) </summary>
+    public decimal DailyLimit { get; set; } = 1000;
+    
+    /// <summary> 每月预算限额 (0 = 不限制) </summary>
+    public decimal MonthlyLimit { get; set; } = 30000;
+    
+    /// <summary> 总预算限额 (0 = 不限制) </summary>
+    public decimal TotalLimit { get; set; } = 0;
+}
+
+/// <summary>
+/// 限流配置
+/// </summary>
+public sealed class RateLimitConfig
 {
     /// <summary> 每分钟最大请求数 </summary>
     public int MaxRequestsPerMinute { get; set; } = 60;
-
-    /// <summary> 每日最大 tokens </summary>
-    public long MaxTokensPerDay { get; set; } = 10000000;
+    
+    /// <summary> 最大并发请求数 </summary>
+    public int MaxConcurrentRequests { get; set; } = 10;
+    
+    /// <summary> 每秒补充的令牌数 (用于令牌桶算法) </summary>
+    public int TokensPerSecond { get; set; } = 10;
+    
+    /// <summary> 令牌桶容量 </summary>
+    public int BucketCapacity { get; set; } = 100;
 }
 
 /// <summary>

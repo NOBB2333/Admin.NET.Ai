@@ -101,16 +101,18 @@ public static class ServiceCollectionInit
         services.TryAddSingleton<IAuditStore, InMemoryAuditStore>();
 
         // 3. 注册中间件
-        // 3.1 Token使用与成本管理 (合并接口: ITokenUsageStore 包含 CalculateCost)
+        // 3.1 Token使用与成本管理
         services.TryAddSingleton<ITokenUsageStore, InMemoryTokenUsageStore>();
-        services.TryAddSingleton<IBudgetStore, InMemoryBudgetStore>();
-        services.TryAddSingleton<IBudgetManager, BudgetManager>();
-        services.TryAddSingleton<IRateLimiter, Admin.NET.Ai.Services.TokenBucketRateLimiter>();
+        services.TryAddSingleton<IQuotaManager, Admin.NET.Ai.Services.Cost.QuotaManager>();
         
-        // 3.2 语义缓存 (简单关键词版)
+        // 3.2 限流 (QuotaOptions 由配置文件 LLMAgent.Features.json LLM-CostControl 节自动绑定)
+        // 配置会被自动扫描加载，无需手动 services.Configure<>
+        services.TryAddSingleton<IRateLimiter, Admin.NET.Ai.Services.RateLimiting.TokenBucketRateLimiter>();
+        
+        // 3.3 语义缓存 (简单关键词版)
         services.TryAddSingleton<ISemanticCache, Admin.NET.Ai.Services.Cache.SimpleSemanticCache>();
         
-        // 3.3 工具权限和沙箱
+        // 3.4 工具权限和沙箱
         services.TryAddSingleton<IToolPermissionManager, Admin.NET.Ai.Services.Tools.ToolPermissionManager>();
         services.TryAddSingleton<IToolExecutionSandbox, Admin.NET.Ai.Services.Tools.ToolExecutionSandbox>();
 
@@ -189,9 +191,11 @@ public static class ServiceCollectionInit
         services.TryAddScoped<AdaptiveCompressionReducer>();
         services.TryAddScoped<LayeredCompressionReducer>();
         
-        // 注册默认 Reducer (使用 Adaptive 作为默认智能入口，或者 Composite)
-        // 这里我们默认使用 AdaptiveCompressionReducer，因为它涵盖了多维判断
+        // 注册默认 Reducer (使用 Adaptive 作为默认智能入口)
         services.TryAddScoped<IChatReducer, AdaptiveCompressionReducer>();
+        
+        // Reducer 工厂
+        services.TryAddSingleton<Admin.NET.Ai.Services.ChatReducerFactory>();
 
         // 存储策略
         services.TryAddSingleton<FileChatMessageStore>();
@@ -200,6 +204,9 @@ public static class ServiceCollectionInit
         services.TryAddSingleton<RedisChatMessageStore>();
         services.TryAddSingleton<VectorChatMessageStore>();
         services.TryAddSingleton<CosmosDBChatMessageStore>();
+        
+        // Storage 工厂
+        services.TryAddSingleton<Admin.NET.Ai.Services.ChatMessageStoreFactory>();
         
         // MAF 适配器使用统一的 IChatMessageStore，无需单独注册
         

@@ -94,37 +94,3 @@ public class InMemoryTokenUsageStore : ITokenUsageStore
         public DateTime CreatedAt { get; set; }
     }
 }
-
-/// <summary>
-/// 内存预算存储
-/// </summary>
-public class InMemoryBudgetStore : IBudgetStore
-{
-    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, UserBudget>> _budgets = new();
-    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, decimal>> _usages = new();
-
-    public Task<UserBudget?> GetUserBudgetAsync(string userId, string modelName, CancellationToken cancellationToken = default)
-    {
-        if (_budgets.TryGetValue(userId, out var userModels) && userModels.TryGetValue(modelName, out var budget))
-        {
-            return Task.FromResult<UserBudget?>(budget);
-        }
-        return Task.FromResult<UserBudget?>(null);
-    }
-
-    public Task<decimal> GetCurrentUsageAsync(string userId, string modelName, CancellationToken cancellationToken = default)
-    {
-        if (_usages.TryGetValue(userId, out var userModels) && userModels.TryGetValue(modelName, out var usage))
-        {
-            return Task.FromResult(usage);
-        }
-        return Task.FromResult(0m);
-    }
-
-    public Task RecordUsageAsync(string userId, string modelName, decimal amount, CancellationToken cancellationToken = default)
-    {
-        var userModels = _usages.GetOrAdd(userId, _ => new ConcurrentDictionary<string, decimal>());
-        userModels.AddOrUpdate(modelName, amount, (_, old) => old + amount);
-        return Task.CompletedTask;
-    }
-}
