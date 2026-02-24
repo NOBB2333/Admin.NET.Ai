@@ -46,7 +46,7 @@ public sealed class MafChatHistoryAdapter : ChatHistoryProvider
     /// 在 Agent 调用 LLM 之前触发 - 从持久化存储加载历史消息
     /// 返回要添加到上下文中的消息列表
     /// </summary>
-    public override async ValueTask<IEnumerable<ChatMessage>> InvokingAsync(
+    protected override async ValueTask<IEnumerable<ChatMessage>> ProvideChatHistoryAsync(
         InvokingContext context, 
         CancellationToken cancellationToken)
     {
@@ -61,7 +61,7 @@ public sealed class MafChatHistoryAdapter : ChatHistoryProvider
     /// <summary>
     /// 在 Agent 调用 LLM 完成后触发
     /// </summary>
-    public override ValueTask InvokedAsync(
+    protected override ValueTask StoreChatHistoryAsync(
         InvokedContext context, 
         CancellationToken cancellationToken)
     {
@@ -85,6 +85,5 @@ public sealed class MafChatHistoryAdapter : ChatHistoryProvider
         await _store.SaveMessagesAsync(ThreadId, messages, cancellationToken);
     }
 
-    public override JsonElement Serialize(JsonSerializerOptions? jsonSerializerOptions = null) =>
-        JsonSerializer.SerializeToElement(ThreadId);
+    public override string StateKey => ThreadId;
 }

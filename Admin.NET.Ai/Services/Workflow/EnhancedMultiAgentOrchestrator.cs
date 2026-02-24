@@ -1,5 +1,6 @@
 using Admin.NET.Ai.Abstractions;
 using Microsoft.Extensions.AI;
+using System.Runtime.CompilerServices;
 
 namespace Admin.NET.Ai.Services.Workflow;
 
@@ -125,7 +126,7 @@ public class EnhancedMultiAgentOrchestrator
     public async IAsyncEnumerable<EnhancedDiscussionEvent> RunDiscussionAsync(
         string topic,
         int rounds = 3,
-        CancellationToken ct = default)
+        [EnumeratorCancellation] CancellationToken ct = default)
     {
         var sharedContext = new SharedContext { Topic = topic };
 
@@ -277,7 +278,7 @@ public class EnhancedMultiAgentOrchestrator
     /// </summary>
     public async IAsyncEnumerable<TaskExecutionEvent> RunTaskAllocationAsync(
         string requirement,
-        CancellationToken ct = default)
+        [EnumeratorCancellation] CancellationToken ct = default)
     {
         var defaultClient = _aiFactory.GetDefaultChatClient()!;
 

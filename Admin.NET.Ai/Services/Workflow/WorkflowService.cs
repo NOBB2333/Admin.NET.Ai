@@ -85,7 +85,7 @@ public class WorkflowService : IWorkflowService
     {
         _logger.LogInformation("执行工作流: {Name}", workflow.Name);
 
-        await using var run = await InProcessExecution.StreamAsync(workflow, input);
+        await using var run = await InProcessExecution.RunStreamingAsync(workflow, input);
         
         // 发送 TurnToken 触发 Agent 执行
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));

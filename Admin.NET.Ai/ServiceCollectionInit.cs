@@ -175,9 +175,6 @@ public static class ServiceCollectionInit
 
         // 9. 内置 Agents (最佳实践)
         services.TryAddScoped<Admin.NET.Ai.Services.Processing.BatchProcessingService>();
-        services.TryAddScoped<Admin.NET.Ai.Agents.BuiltIn.SentimentAnalysisAgent>();
-        services.TryAddScoped<Admin.NET.Ai.Agents.BuiltIn.KnowledgeGraphAgent>();
-        services.TryAddScoped<Admin.NET.Ai.Agents.BuiltIn.QualityEvaluatorAgent>();
         
         // 5. 上下文缩减器 (压缩)
         services.TryAddSingleton<CompressionMonitor>();

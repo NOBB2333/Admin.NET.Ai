@@ -20,6 +20,11 @@ NatashaManagement.RegistDomainCreator<NatashaDomainCreator>(); // lightweight in
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddAdminNetAi(builder.Configuration); // 核心：注册 Admin.NET.Ai 模块
 
+// 注册移动到本项目的内置 Agents
+builder.Services.AddScoped<HeMaCupAICheck.Agents.BuiltIn.SentimentAnalysisAgent>();
+builder.Services.AddScoped<HeMaCupAICheck.Agents.BuiltIn.KnowledgeGraphAgent>();
+builder.Services.AddScoped<HeMaCupAICheck.Agents.BuiltIn.QualityEvaluatorAgent>();
+
 // Console app 兼容性：添加 ASP.NET Core 服务的 Stubs
 builder.Services.AddDistributedMemoryCache(); // IDistributedCache stub
 builder.Services.AddSingleton<Microsoft.AspNetCore.Http.IHttpContextAccessor, NullHttpContextAccessor>();
@@ -116,14 +121,6 @@ while (true)
             case "24": await MiniApiServerDemo.RunAsync(sp); break;
             case "99": 
                 {
-                    // Reflection Inspector
-                    Console.WriteLine("=== Inspecting Checkpointed<T> ===");
-                    var cpType = typeof(Microsoft.Agents.AI.Workflows.Checkpointed<>);
-                    foreach (var member in cpType.GetMembers())
-                    {
-                        Console.WriteLine($"[Checkpointed] {member.MemberType} {member.Name}");
-                    }
-
                     Console.WriteLine("\n=== Inspecting StreamingRun ===");
                     var runType = typeof(Microsoft.Agents.AI.Workflows.StreamingRun);
                      foreach (var prop in runType.GetProperties())
@@ -134,13 +131,6 @@ while (true)
                     {
                          var parameters = string.Join(", ", method.GetParameters().Select(p => $"{p.ParameterType.Name} {p.Name}"));
                          Console.WriteLine($"[StreamingRun Method] {method.Name}({parameters}) : {method.ReturnType.Name}");
-                    }
-                    
-                    Console.WriteLine("\n=== Inspecting Checkpointed<StreamingRun> Properties ===");
-                    var cpRunType = cpType.MakeGenericType(runType);
-                    foreach (var prop in cpRunType.GetProperties())
-                    {
-                        Console.WriteLine($"[Checkpointed<StreamingRun> Prop] {prop.Name} : {prop.PropertyType.Name}");
                     }
 
                 } 

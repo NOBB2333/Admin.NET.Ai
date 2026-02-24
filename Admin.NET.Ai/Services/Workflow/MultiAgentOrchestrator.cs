@@ -1,4 +1,5 @@
 using Microsoft.Extensions.AI;
+using System.Runtime.CompilerServices;
 
 
 namespace Admin.NET.Ai.Services.Workflow;
@@ -52,7 +53,7 @@ public class MultiAgentOrchestrator
     public async IAsyncEnumerable<DiscussionEvent> RunDiscussionAsync(
         string topic,
         int rounds = 3,
-        CancellationToken ct = default)
+        [EnumeratorCancellation] CancellationToken ct = default)
     {
         // 共享上下文 (精简版，只保留要点)
         var sharedContext = new SharedContext { Topic = topic };
@@ -151,7 +152,7 @@ public class MultiAgentOrchestrator
     /// </summary>
     public async IAsyncEnumerable<TaskExecutionEvent> RunTaskAllocationAsync(
         string requirement,
-        CancellationToken ct = default)
+        [EnumeratorCancellation] CancellationToken ct = default)
     {
         // Step 1: 编排者分析并拆分任务
         yield return new TaskExecutionEvent
@@ -306,7 +307,7 @@ public class MultiAgentOrchestrator
 
     private async IAsyncEnumerable<(AgentTask Task, string Result)> RunConcurrentlyAsync(
         IEnumerable<Task<(AgentTask, string)>> tasks,
-        CancellationToken ct)
+        [EnumeratorCancellation] CancellationToken ct)
     {
         var taskList = tasks.ToList();
         while (taskList.Count > 0)
@@ -317,7 +318,7 @@ public class MultiAgentOrchestrator
         }
     }
 
-    private async IAsyncEnumerable<string> GenerateSummaryAsync(SharedContext context, CancellationToken ct)
+    private async IAsyncEnumerable<string> GenerateSummaryAsync(SharedContext context, [EnumeratorCancellation] CancellationToken ct)
     {
         var allPoints = string.Join("\n", context.Points.Select(p => $"[{p.AgentName}]: {p.Summary}"));
         var messages = new List<ChatMessage>
@@ -338,7 +339,7 @@ public class MultiAgentOrchestrator
     private async IAsyncEnumerable<string> GenerateTaskSummaryAsync(
         string requirement, 
         List<(AgentTask Task, string Result)> results, 
-        CancellationToken ct)
+        [EnumeratorCancellation] CancellationToken ct)
     {
         var summary = string.Join("\n\n", results.Select(r => $"【{r.Task.AssignedAgent}】:\n{r.Result}"));
         var messages = new List<ChatMessage>

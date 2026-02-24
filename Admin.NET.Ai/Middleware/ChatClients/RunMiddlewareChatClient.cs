@@ -50,7 +50,7 @@ public class RunMiddlewareChatClient : DelegatingChatClient
     public override IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
         IEnumerable<ChatMessage> chatMessages, 
         ChatOptions? options = null, 
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default)
     {
         // 简单透传，暂不支持流式中间件拦截
         return base.GetStreamingResponseAsync(chatMessages, options, cancellationToken);

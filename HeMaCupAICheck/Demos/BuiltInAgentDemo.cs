@@ -1,5 +1,5 @@
 using Admin.NET.Ai.Abstractions;
-using Admin.NET.Ai.Agents.BuiltIn;
+using HeMaCupAICheck.Agents.BuiltIn;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;

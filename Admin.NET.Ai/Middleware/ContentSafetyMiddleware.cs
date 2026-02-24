@@ -63,6 +63,9 @@ public class ContentSafetyMiddleware : DelegatingChatClient
             _sensitivePatterns.Count, _regexPatterns.Count, _piiPatterns.Count);
     }
 
+    /// <summary>
+    /// 非流式响应 - 完整过滤
+    /// </summary>
     public override async Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages,
         ChatOptions? options = null,
@@ -71,16 +74,19 @@ public class ContentSafetyMiddleware : DelegatingChatClient
         if (!_options.Enabled)
             return await base.GetResponseAsync(messages, options, cancellationToken);
 
+        // 输入过滤
         var filteredMessages = _options.CheckInput
             ? messages.Select(FilterMessage).ToList()
             : messages.ToList();
 
         var response = await base.GetResponseAsync(filteredMessages, options, cancellationToken);
 
+        // 输出过滤
         if (_options.CheckOutput && response.Messages != null)
         {
             var filteredResponseMessages = response.Messages.Select(FilterMessage).ToList();
 
+            // 检查是否需要拦截
             if (_options.ViolationAction == ViolationAction.Block && HasViolation(response))
             {
                 return CreateBlockedResponse();
@@ -98,6 +104,9 @@ public class ContentSafetyMiddleware : DelegatingChatClient
         return response;
     }
 
+    /// <summary>
+    /// 流式响应 - 滑动窗口缓冲过滤
+    /// </summary>
     public override async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
         IEnumerable<ChatMessage> messages,
         ChatOptions? options = null,
@@ -110,6 +119,7 @@ public class ContentSafetyMiddleware : DelegatingChatClient
             yield break;
         }
 
+        // 输入过滤
         var filteredMessages = _options.CheckInput
             ? messages.Select(FilterMessage).ToList()
             : messages.ToList();
@@ -136,10 +146,13 @@ public class ContentSafetyMiddleware : DelegatingChatClient
 
             buffer.Append(update.Text);
 
+            // 当缓冲区足够大时，输出安全的前缀部分
             while (buffer.Length > bufferSize)
             {
                 var safeLength = buffer.Length - bufferSize;
                 var safeText = buffer.ToString(0, safeLength);
+
+                // 过滤并输出
                 var (filtered, violated) = FilterText(safeText);
                 
                 if (violated) hasViolation = true;

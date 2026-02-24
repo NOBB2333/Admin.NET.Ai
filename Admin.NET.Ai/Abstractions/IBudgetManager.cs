@@ -127,14 +127,3 @@ public record QuotaStatus
 }
 
 #endregion
-
-#region 兼容性别名 (deprecated)
-
-/// <summary>
-/// [Deprecated] 使用 IQuotaManager 代替
-/// 保留此接口仅为兼容性，继承自 IQuotaManager
-/// </summary>
-[Obsolete("Use IQuotaManager instead")]
-public interface IBudgetManager : IQuotaManager { }
-
-#endregion

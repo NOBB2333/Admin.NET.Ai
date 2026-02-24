@@ -63,6 +63,10 @@ public class ScriptSourceRewriter : CSharpSyntaxRewriter
         var returnType = node.ReturnType.ToString();
         var isVoid = returnType == "void";
         
+        // 检测方法是否是异步方法 (有 async 修饰符或返回 Task/ValueTask)
+        var isAsync = node.Modifiers.Any(m => m.IsKind(SyntaxKind.AsyncKeyword));
+        var isTaskLike = returnType.StartsWith("Task") || returnType.StartsWith("ValueTask");
+        
         // 1. 构造参数捕获对象 (匿名对象)
         // 自动过滤掉 IScriptExecutionContext 类型的参数和 ct/trace 参数
         string inputExpr = "null";
@@ -107,9 +111,35 @@ public class ScriptSourceRewriter : CSharpSyntaxRewriter
                     }}")
             );
         }
+        else if (isAsync || isTaskLike)
+        {
+            // 对于异步方法，使用 async 局部函数并 await
+            newBody = SyntaxFactory.Block(
+                SyntaxFactory.ParseStatement(syncContext),
+                SyntaxFactory.ParseStatement($@"
+                    using (var scope = _trace?.BeginStep(""{methodName}"", {inputExpr}))
+                    {{
+                        try 
+                        {{
+                            async {returnType} __internal_func() 
+                            {{
+                                {originalBody.Statements.ToFullString()}
+                            }}
+                            var __result = await __internal_func();
+                            scope?.SetOutput(__result);
+                            return __result;
+                        }}
+                        catch (Exception ex)
+                        {{
+                            scope?.SetError(ex);
+                            throw;
+                        }}
+                    }}")
+            );
+        }
         else
         {
-            // 对于有返回值的方法，使用局部函数包装原始逻辑以捕获返回值
+            // 对于同步有返回值的方法，使用普通局部函数
             newBody = SyntaxFactory.Block(
                 SyntaxFactory.ParseStatement(syncContext),
                 SyntaxFactory.ParseStatement($@"

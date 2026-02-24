@@ -29,7 +29,7 @@ public class ToolMiddlewareChatClient : DelegatingChatClient
     public override IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
         IEnumerable<ChatMessage> chatMessages, 
         ChatOptions? options = null, 
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default)
     {
         var wrappedOptions = WrapOptions(options);
         return base.GetStreamingResponseAsync(chatMessages, wrappedOptions, cancellationToken);

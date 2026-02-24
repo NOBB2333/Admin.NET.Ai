@@ -5,14 +5,18 @@ using Microsoft.Extensions.Logging;
 using System.ComponentModel;
 using System.Text.Json.Serialization;
 
-namespace Admin.NET.Ai.Agents.BuiltIn;
+namespace HeMaCupAICheck.Agents.BuiltIn;
 
 /// <summary>
 /// 知识图谱 Agent - 实体抽取、关系推理、图谱问答
 /// 最佳实践: 结构化输出 + 内存图谱 + 路径查询
 /// </summary>
-public class KnowledgeGraphAgent
+public class KnowledgeGraphAgent : IAiAgent
 {
+    // Public properties for IAiAgent
+    public string Name { get; set; } = "KnowledgeGraphAgent";
+    public string Instructions { get; set; } = SystemInstruction;
+
     private readonly IChatClient _chatClient;
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<KnowledgeGraphAgent> _logger;

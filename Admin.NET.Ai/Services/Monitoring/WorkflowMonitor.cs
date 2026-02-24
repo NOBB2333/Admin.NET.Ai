@@ -85,10 +85,10 @@ public class WorkflowMonitor
     {
         _logger.LogInformation(
             "Workflow {WorkflowId} Completed. Output from: {Source}",
-            workflowId, output.SourceId);
+            workflowId, output.ExecutorId);
         
         parentActivity?.SetStatus(ActivityStatusCode.Ok);
-        parentActivity?.SetTag("workflow.source", output.SourceId);
+        parentActivity?.SetTag("workflow.source", output.ExecutorId);
     }
 
     private void LogHumanInputRequest(string workflowId, RequestInfoEvent requestInfo)

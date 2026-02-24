@@ -61,7 +61,7 @@ public static class ConsoleDebugExtensions
                     break;
                     
                 case WorkflowOutputEvent output:
-                    Console.WriteLine($"\n[最终结果 from {output.SourceId}]:\n{output.Data}");
+                    Console.WriteLine($"\n[最终结果 from {output.ExecutorId}]:\n{output.Data}");
                     break;
             }
         }

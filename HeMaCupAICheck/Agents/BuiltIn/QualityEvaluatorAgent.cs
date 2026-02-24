@@ -5,14 +5,18 @@ using Microsoft.Extensions.Logging;
 using System.ComponentModel;
 using System.Text.Json.Serialization;
 
-namespace Admin.NET.Ai.Agents.BuiltIn;
+namespace HeMaCupAICheck.Agents.BuiltIn;
 
 /// <summary>
 /// 对话质量评估 Agent - 评估AI响应质量和对话效果
 /// 最佳实践: 多维度评分 + 结构化反馈 + 快速规则检查
 /// </summary>
-public class QualityEvaluatorAgent
+public class QualityEvaluatorAgent : IAiAgent
 {
+    // Public properties for IAiAgent
+    public string Name { get; set; } = "QualityEvaluatorAgent";
+    public string Instructions { get; set; } = SystemInstruction;
+
     private readonly IChatClient _chatClient;
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<QualityEvaluatorAgent> _logger;

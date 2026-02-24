@@ -378,16 +378,25 @@ public class AiFactory : IAiFactory
 
                  if (agent != null)
                  {
-                    var type = typeof(TAgent);
-                    
-                     // 设置名称和指令 (显式属性赋值)
-                     if (agent is Admin.NET.Ai.Agents.BuiltIn.SentimentAnalysisAgent sentimentAgent)
+                     // 设置名称和指令 (优先使用 IAiAgent 接口)
+                     if (agent is Admin.NET.Ai.Abstractions.IAiAgent aiAgent)
                      {
-                         sentimentAgent.Name = agentName;
-                         if (!string.IsNullOrEmpty(instructions))
-                         {
-                             sentimentAgent.Instructions = instructions;
-                         }
+                         if (!string.IsNullOrEmpty(agentName)) aiAgent.Name = agentName;
+                         if (!string.IsNullOrEmpty(instructions)) aiAgent.Instructions = instructions;
+                     }
+                     else 
+                     {
+                        // 兼容方案：对于没有实现接口的 Agent，尝试使用反射兜底
+                        if (!string.IsNullOrEmpty(agentName))
+                        {
+                            var nameProp = agent.GetType().GetProperty("Name");
+                            if (nameProp != null && nameProp.CanWrite) nameProp.SetValue(agent, agentName);
+                        }
+                        if (!string.IsNullOrEmpty(instructions))
+                        {
+                            var instProp = agent.GetType().GetProperty("Instructions");
+                            if (instProp != null && instProp.CanWrite) instProp.SetValue(agent, instructions);
+                        }
                      }
                      
                      return agent;

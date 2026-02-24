@@ -34,7 +34,7 @@ public class AgentWorkflow
             yield break;
         }
 
-        await using var run = await InProcessExecution.StreamAsync(InternalWorkflow, input);
+        await using var run = await InProcessExecution.RunStreamingAsync(InternalWorkflow, input);
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
         await foreach (var evt in run.WatchStreamAsync())

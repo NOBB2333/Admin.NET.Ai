@@ -5,13 +5,13 @@ using Microsoft.Extensions.Logging;
 using System.ComponentModel;
 using System.Text.Json.Serialization;
 
-namespace Admin.NET.Ai.Agents.BuiltIn;
+namespace HeMaCupAICheck.Agents.BuiltIn;
 
 /// <summary>
 /// 情感分析 Agent - 分析文本情感极性和情绪
 /// 最佳实践: 结构化输出 + 专业系统指令
 /// </summary>
-public class SentimentAnalysisAgent
+public class SentimentAnalysisAgent : IAiAgent
 {
     // Public properties for easy initialization (avoiding reflection)
     public string Name { get; set; } = "SentimentAnalysisAgent";

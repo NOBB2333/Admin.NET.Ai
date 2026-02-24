@@ -83,7 +83,7 @@ public static class WorkflowDemo
 
         // 执行工作流
         var input = new ChatMessage(ChatRole.User, topic);
-        await using var run = await InProcessExecution.StreamAsync(workflow, input);
+        await using var run = await InProcessExecution.RunStreamingAsync(workflow, input);
         
         // 发送 TurnToken 触发 Agent 执行
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
@@ -173,8 +173,12 @@ public static class WorkflowDemo
 
         // 构建 Fan-out / Fan-in 工作流
         var workflow = new WorkflowBuilder(startExecutor)
-            .AddFanOutEdge(startExecutor, [amazonAgent, ebayAgent, jdAgent])  // 并行分发
-            .AddFanInEdge([amazonAgent, ebayAgent, jdAgent], aggregator)       // 汇聚结果
+            .AddEdge(startExecutor, amazonAgent)
+            .AddEdge(startExecutor, ebayAgent)
+            .AddEdge(startExecutor, jdAgent)
+            .AddEdge(amazonAgent, aggregator)
+            .AddEdge(ebayAgent, aggregator)
+            .AddEdge(jdAgent, aggregator)
             .WithOutputFrom(aggregator)
             .Build();
 
@@ -185,7 +189,7 @@ public static class WorkflowDemo
 
         // 执行工作流
         var query = new PriceQueryRequest(productName, "CN");
-        await using var run = await InProcessExecution.StreamAsync(workflow, query);
+        await using var run = await InProcessExecution.RunStreamingAsync(workflow, query);
 
         Console.WriteLine($"� 正在并行查询 '{productName}' 的价格...\n");
 
@@ -265,7 +269,7 @@ public static class WorkflowDemo
         Console.WriteLine("📋 翻译流程: 原文 → 🇫🇷 French → 🇪🇸 Spanish → 🇺🇸 English\n");
 
         // 执行工作流
-        await using var run = await InProcessExecution.StreamAsync(workflow, text);
+        await using var run = await InProcessExecution.RunStreamingAsync(workflow, text);
 
         await foreach (var evt in run.WatchStreamAsync())
         {
@@ -330,7 +334,7 @@ public static class WorkflowDemo
         Console.WriteLine($"\n📥 输入: {text}\n");
         
         // 使用流式执行获取输出
-        await using var run = await InProcessExecution.StreamAsync(workflow, text);
+        await using var run = await InProcessExecution.RunStreamingAsync(workflow, text);
         
         string? finalOutput = null;
         await foreach (var evt in run.WatchStreamAsync())
@@ -367,7 +371,7 @@ public static class WorkflowDemo
         var question = Console.ReadLine() ?? "What is machine learning?";
 
         var input = new ChatMessage(ChatRole.User, question);
-        await using var run = await InProcessExecution.StreamAsync(workflow, input);
+        await using var run = await InProcessExecution.RunStreamingAsync(workflow, input);
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
         Console.WriteLine("\n--- 事件流监控 ---\n");
@@ -422,7 +426,7 @@ public static class WorkflowDemo
 
                 case WorkflowOutputEvent output:
                     Console.ForegroundColor = ConsoleColor.Magenta;
-                    Console.WriteLine($"📤 工作流输出 (来自: {output.SourceId})");
+                    Console.WriteLine($"📤 工作流输出 (来自: {output.ExecutorId})");
                     Console.ResetColor();
                     break;
             }
