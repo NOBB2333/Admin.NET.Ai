@@ -143,6 +143,7 @@ public static class ServiceCollectionInit
         // RAG 增强组件
         services.TryAddSingleton<IDocumentChunker, Admin.NET.Ai.Services.Rag.DocumentChunker>();
         services.TryAddSingleton<Admin.NET.Ai.Services.Rag.IReranker, Admin.NET.Ai.Services.Rag.HybridReranker>();
+        services.TryAddScoped<Admin.NET.Ai.Services.Rag.LocalTextDocumentLoader>();
 
         // 工作流和代理
         services.TryAddScoped<IWorkflowService, WorkflowService>();

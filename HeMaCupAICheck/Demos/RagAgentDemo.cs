@@ -3,12 +3,11 @@ using Admin.NET.Ai.Extensions;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using System.Text.Json;
 
 namespace HeMaCupAICheck.Demos;
 
 /// <summary>
-/// 场景18: RAG + Agent 智能问答
+/// 场景18: RAG + Agent 智能问答 (轻量级/长下文暴力填充模式)
 /// 
 /// 📌 企业最常用场景：知识库检索 + Agent 推理回答
 /// 
@@ -16,66 +15,46 @@ namespace HeMaCupAICheck.Demos;
 /// 1. 用户提问 → RAG 检索相关文档
 /// 2. 检索结果 + 原问题 → Agent 推理
 /// 3. 基于知识库的精准回答
+/// 【本方案说明】
+/// 这是最基础的“提示词工程”版 RAG (Prompt-Stuffing RAG)。
+/// 做法：直接读取本地的几个文档，通过极其简单的关键词 Contains 匹配（甚至如果文档少，就全部无脑读取），
+/// 然后一股脑（全部拼接成一长串字符串）塞给大模型的 Prompt 里面，依靠大模型的长上下文能力（Long Context）让模型自己去归纳。
+///
+/// 【适用/不适用场景】
+/// ✅ 适用：知识库非常小（比如只有几万字，几个 md/txt 文件）。无需维护庞大的向量数据库，也不会丢失全局上下文。
+/// ❌ 不适用：当文件达到几十个、数百个时，Token 会爆炸，API 费用极高，且模型会彻底遗忘中间内容。
 /// </summary>
 public static class RagAgentDemo
 {
-    // 模拟知识库 (实际用向量数据库)
-    private static readonly Dictionary<string, string> KnowledgeBase = new()
-    {
-        ["员工手册-请假规定"] = """
-            员工请假规定：
-            1. 年假：每年15天，需提前5天申请
-            2. 病假：需提供医院证明，当天或次日补办手续
-            3. 事假：需提前3天申请，超过3天需部门经理审批
-            4. 婚假：法定3天，晚婚可延长至15天
-            5. 产假：女员工158天，男员工陪产假15天
-            """,
-        ["员工手册-差旅报销"] = """
-            差旅报销标准：
-            1. 交通：火车二等座、飞机经济舱（4小时以上航程）
-            2. 住宿：一线城市不超过500元/晚，二线400元/晚
-            3. 餐补：100元/天
-            4. 流程：填写报销单→附发票→部门审批→财务审核（5个工作日）
-            5. 注意：超标需提前申请特批
-            """,
-        ["技术文档-用户API"] = """
-            用户管理 API 文档：
-            - GET /api/users - 获取用户列表，支持分页 ?page=1&size=20
-            - GET /api/users/{id} - 获取单个用户详情
-            - POST /api/users - 创建用户，需要 {name, email, role}
-            - PUT /api/users/{id} - 更新用户信息
-            - DELETE /api/users/{id} - 删除用户
-            认证：所有接口需要 Bearer Token，Header: Authorization: Bearer {token}
-            """,
-        ["产品手册-Admin.NET.Ai功能"] = """
-            Admin.NET.Ai 核心功能：
-            1. 多模型工厂 (AiFactory) - 统一管理多个 LLM 提供商
-            2. 中间件管道 - 日志、审计、重试、限流、Token监控
-            3. RAG 知识检索 - 向量相似度搜索 + 知识图谱
-            4. MCP 工具调用 - 支持 Stdio/HTTP 协议连接外部工具
-            5. 工作流编排 - 多 Agent 协作、顺序/并行执行
-            6. 结构化输出 - JSON Schema 约束生成
-            """,
-        ["产品手册-MCP集成"] = """
-            MCP (Model Context Protocol) 集成说明：
-            1. 支持 Stdio 和 HTTP 两种传输协议
-            2. 使用 McpToolFactory 加载外部工具
-            3. 工具会自动转换为 MEAI 的 AITool 格式
-            4. 配合 FunctionInvocation 中间件实现自动工具调用
-            5. 配置文件: LLMAgent.Mcp.json
-            """
-    };
-
     public static async Task RunAsync(IServiceProvider sp)
     {
         var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("RagAgentDemo");
         var aiFactory = sp.GetRequiredService<IAiFactory>();
+        
+        var loader = sp.GetRequiredService<Admin.NET.Ai.Services.Rag.LocalTextDocumentLoader>();
+        var staticPath = Path.Combine(AppContext.BaseDirectory, "Demos", "Static", "RagFile");
+        var rawDocs = await loader.LoadDirectoryAsync(staticPath);
+
+        // 如果没有找到文件，使用一个默认的
+        if (rawDocs.Count == 0)
+        {
+            rawDocs.Add(new RawDocument { 
+                SourceName = "无知识库", 
+                Content = "未能从 Demos/Static/RagFile 目录中读取到任何知识库文件。请添加文件后再试。" 
+            });
+        }
+
+        // 构建临时的内存 KnowledgeBase 字典供搜索使用 (简化 RAG)
+        var knowledgeBase = rawDocs.ToDictionary(
+            d => d.SourceName ?? "Unknown", 
+            d => d.Content
+        );
 
         Console.WriteLine("\n========== RAG + Agent 智能问答 ==========\n");
 
         // ===== 1. 展示知识库 =====
         Console.WriteLine("--- 1. 企业知识库内容 ---");
-        foreach (var doc in KnowledgeBase)
+        foreach (var doc in knowledgeBase)
         {
             Console.WriteLine($"  📄 {doc.Key}");
         }
@@ -103,7 +82,7 @@ public static class RagAgentDemo
                 Console.ResetColor();
 
                 // RAG 检索 (模拟向量相似度搜索)
-                var docs = SearchDocuments(question);
+                var docs = SearchDocuments(knowledgeBase, question);
                 Console.WriteLine($"📚 检索到 {docs.Count} 条相关文档");
                 
                 if (docs.Count > 0)
@@ -139,6 +118,60 @@ public static class RagAgentDemo
                 Console.ResetColor();
                 Console.WriteLine();
             }
+
+            // ================= 新增：支持用户手动输入问答 =================
+            Console.WriteLine("\n--------------------------------------------------");
+            Console.WriteLine("✨ 现在你可以试着自己向智能问答助手提问了！");
+            Console.WriteLine("请输入你的问题 (输入 'q' 或 'exit' 退出):");
+            
+            while (true)
+            {
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.Write("\n🙋 你的问题: ");
+                Console.ResetColor();
+                
+                var userQuestion = Console.ReadLine();
+                if (string.IsNullOrWhiteSpace(userQuestion)) continue;
+                if (userQuestion.Trim().Equals("q", StringComparison.OrdinalIgnoreCase) || 
+                    userQuestion.Trim().Equals("exit", StringComparison.OrdinalIgnoreCase))
+                {
+                    break;
+                }
+
+                // 同样进行检索和推理
+                var docs = SearchDocuments(knowledgeBase, userQuestion);
+                Console.WriteLine($"📚 检索到 {docs.Count} 条相关文档");
+                if (docs.Count > 0)
+                {
+                    Console.ForegroundColor = ConsoleColor.DarkGray;
+                    Console.WriteLine($"   匹配: {string.Join(", ", docs.Select(d => d.Key))}");
+                    Console.ResetColor();
+                }
+
+                var context = docs.Any() 
+                    ? string.Join("\n\n", docs.Select(d => $"【{d.Key}】\n{d.Value}")) 
+                    : "未找到相关文档";
+
+                var enhancedPrompt = $"""
+                你是一个企业知识库助手。请基于以下知识库内容回答用户问题。
+                如果知识库中没有相关信息，请明确说明"知识库中未找到相关信息"。
+                回答要简洁准确，可以适当总结要点。
+
+                === 知识库内容 ===
+                {context}
+
+                === 用户问题 ===
+                {userQuestion}
+
+                请回答：
+                """;
+
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.Write("🤖 助手: ");
+                await chatClient!.GetStreamingResponseAsync(enhancedPrompt).WriteToConsoleAsync();
+                Console.ResetColor();
+                Console.WriteLine();
+            }
         }
         catch (Exception ex)
         {
@@ -147,18 +180,20 @@ public static class RagAgentDemo
 
         // ===== 3. 代码示例 =====
         Console.WriteLine("\n--- 3. 完整代码示例 ---");
-        Console.WriteLine(@"
-// 1. 向量检索 (使用 Embedding + 余弦相似度)
-var embedding = await embeddingGenerator.GenerateEmbeddingAsync(userQuery);
-var docs = await vectorDb.SearchAsync(embedding, topK: 5, threshold: 0.7);
+        Console.WriteLine("""
 
-// 2. 构建 RAG Prompt
-var context = string.Join(""\n"", docs.Select(d => d.Content));
-var prompt = $""基于以下内容回答:\n{context}\n\n问题: {userQuery}"";
+                          // 1. 向量检索 (使用 Embedding + 余弦相似度)
+                          var embedding = await embeddingGenerator.GenerateEmbeddingAsync(userQuery);
+                          var docs = await vectorDb.SearchAsync(embedding, topK: 5, threshold: 0.7);
 
-// 3. Agent 推理
-var response = await chatClient.GetStreamingResponseAsync(prompt).WriteToConsoleAsync();
-");
+                          // 2. 构建 RAG Prompt
+                          var context = string.Join("\n", docs.Select(d => d.Content));
+                          var prompt = $"基于以下内容回答:\n{context}\n\n问题: {userQuery}";
+
+                          // 3. Agent 推理
+                          var response = await chatClient.GetStreamingResponseAsync(prompt).WriteToConsoleAsync();
+
+                          """);
 
         Console.WriteLine("\n========== RAG + Agent 演示结束 ==========");
     }
@@ -166,14 +201,14 @@ var response = await chatClient.GetStreamingResponseAsync(prompt).WriteToConsole
     /// <summary>
     /// 模拟 RAG 检索 (实际应使用向量相似度)
     /// </summary>
-    private static List<KeyValuePair<string, string>> SearchDocuments(string query)
+    private static List<KeyValuePair<string, string>> SearchDocuments(Dictionary<string, string> knowledgeBase, string query)
     {
         var results = new List<(KeyValuePair<string, string> Doc, int Score)>();
         
         // 提取关键词
         var keywords = ExtractKeywords(query);
         
-        foreach (var doc in KnowledgeBase)
+        foreach (var doc in knowledgeBase)
         {
             var score = 0;
             var docText = doc.Key + " " + doc.Value;
@@ -195,6 +230,12 @@ var response = await chatClient.GetStreamingResponseAsync(prompt).WriteToConsole
             }
         }
         
+        // 如果严格匹配一无获，且总文档数不多（低于 20），则当作全量上下文返回（简化 Demo 逻辑）
+        if (results.Count == 0 && knowledgeBase.Count <= 20)
+        {
+            return knowledgeBase.Select(k => new KeyValuePair<string, string>(k.Key, k.Value)).ToList();
+        }
+
         return results
             .OrderByDescending(r => r.Score)
             .Take(3)
@@ -210,11 +251,11 @@ var response = await chatClient.GetStreamingResponseAsync(prompt).WriteToConsole
         var synonymGroups = new Dictionary<string[], string[]>
         {
             // 查询词 -> 文档可能包含的词
-            { new[] { "请假", "假期", "休假", "年假", "病假", "事假" }, new[] { "请假", "假" } },
-            { new[] { "出差", "住酒店", "酒店", "报销", "差旅", "交通" }, new[] { "差旅", "报销", "住宿" } },
-            { new[] { "API", "接口", "调用", "用户接口" }, new[] { "API", "接口" } },
-            { new[] { "MCP", "工具", "协议", "外部工具" }, new[] { "MCP", "工具" } },
-            { new[] { "功能", "特性", "能力", "支持" }, new[] { "功能", "核心" } }
+            { ["请假", "假期", "休假", "年假", "病假", "事假"], ["请假", "假"] },
+            { ["出差", "住酒店", "酒店", "报销", "差旅", "交通"], ["差旅", "报销", "住宿"] },
+            { ["API", "接口", "调用", "用户接口"], ["API", "接口"] },
+            { ["MCP", "工具", "协议", "外部工具"], ["MCP", "工具"] },
+            { ["功能", "特性", "能力", "支持"], ["功能", "核心"] }
         };
 
         var score = 0;
