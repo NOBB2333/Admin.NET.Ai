@@ -10,7 +10,7 @@ public static class StructuredOutputDemo
 {
     public static async Task RunAsync(IServiceProvider sp)
     {
-        Console.WriteLine("\n=== [3] 结构化数据提取与 TOON 协议 ===");
+        Console.WriteLine("\n=== [4] 结构化数据提取 (JSON Schema, TOON) ===");
         
         var aiFactory = sp.GetRequiredService<IAiFactory>();
         var client = aiFactory.GetDefaultChatClient();

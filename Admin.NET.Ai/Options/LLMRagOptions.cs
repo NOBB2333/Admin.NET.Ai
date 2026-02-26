@@ -45,7 +45,13 @@ public sealed class EmbeddingConfig
     public string? Model { get; set; }
 
     /// <summary> 向量维度 </summary>
-    public int Dimension { get; set; } = 1536;
+    public int Dimension { get; set; } = 1024;
+
+    /// <summary> API Key (可选 — 为空时从 LLM-Clients 中的同名 Provider 读取) </summary>
+    public string? ApiKey { get; set; }
+
+    /// <summary> Base URL (可选 — 为空时从 LLM-Clients 中的同名 Provider 读取) </summary>
+    public string? BaseUrl { get; set; }
 }
 
 /// <summary> 

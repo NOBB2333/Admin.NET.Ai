@@ -16,7 +16,7 @@ public static class StorageDemo
         var aiFactory = sp.GetRequiredService<IAiFactory>();
         var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
 
-        Console.WriteLine("\n========== 对话存储策略演示 ==========\n");
+        Console.WriteLine("\n=== [24] 存储策略 (Hot/Cold/Vector) ===\n");
 
         // ===== 1. 内存存储 =====
         Console.WriteLine("--- 1. InMemoryChatMessageStore (默认) ---");

@@ -10,7 +10,7 @@ public static class MediaDemo
 {
     public static async Task RunAsync(IServiceProvider sp)
     {
-        Console.WriteLine("\n=== [17] 媒体生成功能演示 ===\n");
+        Console.WriteLine("\n=== [27] 媒体生成 (TTS/ASR/图像/视频) ===\n");
 
         var mediaService = sp.GetRequiredService<IMediaGenerationService>();
 

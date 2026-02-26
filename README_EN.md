@@ -24,35 +24,46 @@ Admin.NET.Ai is an enterprise-grade AI capability core library built on **.NET 1
 | Feature | Description |
 | :--- | :--- |
 | 🔌 **Multi-Provider Support** | Seamlessly switch between OpenAI, DeepSeek, Qwen, Gemini, Ollama, etc. |
-| 🤖 **Multi-Agent Orchestration** | Sequential/Parallel/Orchestrator/Roundtable modes, multi-provider for diversity |
-| 🔧 **MCP Tool Discovery** | `[McpTool]` attribute to expose methods as MCP tools |
+| 🤖 **Multi-Agent Orchestration** | Sequential/Parallel/Orchestrator/Roundtable modes, LLM-driven Agent auto-discovery & dispatch |
+| 🔧 **Enhanced Tool System** | FileSystem/Search/Shell tools + self-managed approval + MCP tool discovery |
 | 🎨 **Media Generation** | TTS/ASR/Image/Video generation with multi-provider support |
 | 📚 **Hybrid RAG** | Vector retrieval + Neo4j GraphRAG + Reranking |
-| ⚡ **Middleware Pipeline** | Caching/Rate-limiting/Token billing/Audit/Retry |
+| ⚡ **Three-Layer Middleware** | Chat pipeline (Token/cost/caching) + Tool pipeline (approval/monitoring/validation) + rate limiting/audit |
+| 🗜️ **Three-Zone Compression** | First-turn preservation + LLM summarization of history + recent message retention |
 | 🔥 **Hot-Reload Scripting** | Natasha C# script engine for dynamic Agent logic updates |
 | 📊 **Full Observability** | Trace timeline + DevUI visual debugging |
 
 ### 📋 Feature Demos Overview (Console)
 
-| # | Module | Description |
-| :---: | :--- | :--- |
-| 1 | Basic Chat & Middleware | Chat, Audit, Tokens |
-| 2 | Multi-Agent Workflow | MAF Sequential & Autonomous |
-| 3 | Structured Data Extraction | JSON Schema, TOON |
-| 4 | Smart Tools & Approval | Discover, Approval |
-| 5 | Dynamic Script Hot-Reload | Natasha Scripting |
-| 6 | Context Compression | Compression Reducers |
-| 7 | Prompt Engineering | Prompt Templates |
-| 8 | RAG Knowledge Retrieval | GraphRAG & Vector |
-| 9 | Multimodal Capabilities | Vision & Audio |
-| 10 | Conversation Persistence | Thread & Database |
-| 11 | Real-world Scenarios | Comprehensive Applications |
-| 12 | Built-in Agents | Sentiment/Knowledge Graph/Quality |
-| 13 | Middleware Deep-dive | Middleware Stack |
-| 14 | MCP Protocol | External Tool Integration |
-| 15 | Monitoring & Metrics | OpenTelemetry |
-| 16 | Storage Strategies | Hot/Cold/Vector |
-| **17** | **⭐ Media Generation** | **TTS/ASR/Image/Video** |
+| # | Category | Module | Description |
+| :---: | :--- | :--- | :--- |
+| **★1** | **Universal** | **Universal Agent** | **All-in-One Agent, auto-loads all tools & agents** |
+| 2 | Chat Basics | Basic Chat & Middleware | Chat, Audit, Tokens |
+| 3 | Chat Basics | Prompt Engineering | Prompt Templates |
+| 4 | Chat Basics | Structured Extraction | JSON Schema, TOON |
+| 5 | Chat Basics | Code Generator | Structured Output |
+| 6 | Chat Basics | Multimodal | Vision & Audio |
+| 7 | Tools | Smart Tools & Approval | Discover, Approval |
+| 8 | Tools | Enhanced Tool System | FileSystem/Search/Shell |
+| 9 | Tools | MCP Protocol | External Tool Integration |
+| 10 | Tools | MCP Calendar Assistant | Official SDK Tool Calls |
+| 11 | Tools | MCP MiniApi Server | External Tool Integration |
+| 12 | Agents | Built-in Agents | Sentiment/Knowledge Graph/Quality |
+| 13 | Agents | LLM Agent Dispatch | Auto-Discovery |
+| 14 | Agents | Multi-Agent Workflow | MAF Sequential & Autonomous |
+| 15 | Agents | Multi-Agent Review | Writer→Reviewer→Editor |
+| 16 | Agents | Customer Service Routing | Intent Recognition + Routing |
+| 17 | Data | RAG Knowledge Retrieval | GraphRAG & Vector |
+| 18 | Data | RAG + Agent QA | Knowledge Base + Reasoning |
+| 19 | Data | Context Compression | ThreeZone/Summarizing/Counting |
+| 20 | Data | Conversation Persistence | Thread & Database |
+| 21 | Infra | Middleware Deep-dive | Middleware Stack |
+| 22 | Infra | Content Safety | Sensitive Word Replace + PII Masking |
+| 23 | Infra | Monitoring & Metrics | OpenTelemetry |
+| 24 | Infra | Storage Strategies | Hot/Cold/Vector |
+| 25 | Infra | Dynamic Script Hot-Reload | Natasha Scripting |
+| 26 | Scenarios | Real-world Scenarios | Comprehensive Applications |
+| 27 | Scenarios | Media Generation | TTS/ASR/Image/Video |
 
 ---
 
@@ -77,6 +88,17 @@ var client = aiFactory.GetDefaultChatClient();
 var response = await client.GetResponseAsync("Hello, I'm Admin.NET");
 ```
 
+#### Enhanced Tool System (Auto-Discovery + Context Injection)
+```csharp
+var toolManager = sp.GetRequiredService<ToolManager>();
+var context = new ToolExecutionContext
+{
+    WorkingDirectory = Directory.GetCurrentDirectory(),
+    UserId = "user-001"
+};
+var functions = toolManager.GetAllAiFunctions(context); // Auto-scan all tools with context
+```
+
 #### Multi-Agent Collaboration
 ```csharp
 var orchestrator = new EnhancedMultiAgentOrchestrator(aiFactory);
@@ -92,21 +114,11 @@ await foreach (var evt in orchestrator.RunDiscussionAsync("Impact of AI on devel
 
 #### MCP Tools
 ```csharp
-[McpTool("Get weather information")]  // Name defaults to method name
+[McpTool("Get weather information")]
 public WeatherInfo GetWeather([McpParameter("City name")] string city)
 {
     return new WeatherInfo { City = city, Temperature = 20 };
 }
-```
-
-#### Image Generation
-```csharp
-var mediaService = sp.GetRequiredService<IMediaGenerationService>();
-var result = await mediaService.GenerateImageAsync(new ImageGenRequest
-{
-    Prompt = "A cute robot cat",
-    Provider = "OpenAI"
-});
 ```
 
 ---
@@ -115,10 +127,15 @@ var result = await mediaService.GenerateImageAsync(new ImageGenRequest
 
 ```
 Admin.NET.Ai/
-├── Abstractions/        # Interface definitions
+├── Abstractions/        # Interfaces: IAiFactory, IAiAgent, IAiCallableFunction, IChatReducer
 ├── Core/                # AiFactory, PipelineBuilder
-├── Middleware/          # Caching/RateLimiting/Audit/TokenBilling
+├── Middleware/
+│   ├── TokenMonitoringMiddleware   # Chat pipeline: Token/cost/newline fix
+│   ├── ToolValidationMiddleware    # Tool pipeline: permission/approval/params/sandbox/sanitize
+│   └── ToolMonitoringMiddleware    # Tool pipeline: classification logging/duration
 ├── Services/
+│   ├── Tools/           # ToolManager + FileSystem/Search/Shell/AgentDispatch
+│   ├── Context/         # ChatReducerFactory (ThreeZone/Summarizing/MessageCounting)
 │   ├── MCP/             # MCP Protocol + Tool Discovery
 │   ├── Media/           # TTS/ASR/ImageGen/VideoGen
 │   ├── Rag/             # Vector + GraphRAG
@@ -126,6 +143,20 @@ Admin.NET.Ai/
 ├── Configuration/       # JSON config files
 ├── _doc/                # User documentation
 └── _doc_Pro/            # Technical deep-dive
+```
+
+### Middleware Responsibility Split
+
+```
+Request → TokenMonitoringMiddleware (Token/Cost)
+            ↓
+         LLM decides to call tool
+            ↓
+         ToolValidationMiddleware (Permission → Approval → Params → Sandbox → Sanitize)
+            ↓
+         ToolMonitoringMiddleware (🔧Tool / 🤖Agent / ⚡Skill classification)
+            ↓
+         Actual Tool Execution
 ```
 
 ---
@@ -172,10 +203,8 @@ Run the console demo:
 dotnet run --project HeMaCupAICheck
 ```
 
-Choose from 17 feature demos:
-1. Basic Chat | 2. Multi-Agent Workflow | 3. Structured Output | 4. Tool Calling | 5. Hot-Reload Script
-6. Context Compression | 7. Prompts | 8. RAG | 9. Multimodal | 10. Persistence
-12. Built-in Agents | 13. Middleware | 14. MCP | 15. Monitoring | 16. Storage | **17. Media Generation**
+Select **1** to enter the Universal Agent — all tools and agents auto-loaded, LLM decides autonomously what to invoke.
+27 feature demos total, grouped by category: Chat Basics · Tool System · Agent/Workflow · Data & Knowledge · Infrastructure · Scenarios.
 
 ---
 

@@ -8,7 +8,7 @@ public static class CompressionDemo
 {
     public static async Task RunAsync(IServiceProvider sp)
     {
-        Console.WriteLine("\n=== [6] 上下文压缩策略演示 ===");
+        Console.WriteLine("\n=== [19] 上下文压缩策略 (Compression Reducers) ===");
 
         // 1. 获取 Reducer (MEAI 接口)
         var reducer = sp.GetService<IChatReducer>();

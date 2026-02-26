@@ -55,33 +55,47 @@ while (true)
     ==================================================
         Admin.NET.Ai 模块功能全景演示 (Console)
     ==================================================
-    1. 基础对话与中间件 (Chat, Audit, Tokens)
-    2. 多 Agent 工作流 (MAF Sequential & Autonomous)
-    3. 结构化数据提取 (JSON Schema, TOON)
-    4. 智能工具与审批流 (Discover, Approval)
-    5. 动态脚本热重载 (Natasha Scripting)
-    6. 上下文压缩策略 (Compression Reducers)
-    7. 提示词工程 (Prompt Templates)
-    8. RAG 知识检索 (GraphRAG & Vector)
-    9. 多模态能力 (Vision & Audio)
-    10. 对话持久化 (Thread & Database)
-    11. 综合场景应用 (Real-world Scenario)
-    --------------------------------------------------
+
+    ★ 1. 综合性对话智能体 (All-in-One Agent)
+
+    ── 对话基础 ──────────────────────────────────
+    2.  基础对话与中间件 (Chat, Audit, Tokens)
+    3.  提示词工程 (Prompt Templates)
+    4.  结构化数据提取 (JSON Schema, TOON)
+    5.  代码生成助手 (Structured Output)
+    6.  多模态能力 (Vision & Audio)
+
+    ── 工具系统 ──────────────────────────────────
+    7.  智能工具与审批流 (Discover, Approval)
+    8.  增强工具系统 (FileSystem/Search/Shell)
+    9.  MCP 协议 (外部工具集成)
+    10. MCP 日历助手 (官方SDK工具调用)
+    11. MCP MiniApi 服务 (外部工具集成)
+
+    ── Agent 与工作流 ────────────────────────────
     12. 内置 Agent (情感/知识图谱/质量评估)
-    13. 中间件详解 (Middleware Stack)
-    14. MCP 协议 (外部工具集成)
-    15. 监控与指标 (OpenTelemetry)
-    16. 存储策略 (Hot/Cold/Vector)
-    17. ★ 媒体生成 (TTS/ASR/图像/视频)
-    --------------------------------------------------
-    ★★ 新增实用场景 ★★
+    13. LLM Agent 自主调度 (Auto-Discovery)
+    14. 多 Agent 工作流 (MAF Sequential & Autonomous)
+    15. 多 Agent 文档审核 (Writer→Reviewer→Editor)
+    16. 客服智能分流 (意图识别+路由)
+
+    ── 数据与知识 ────────────────────────────────
+    17. RAG 知识检索 (GraphRAG & Vector)
     18. RAG + Agent 智能问答 (知识库+推理)
-    19. MCP 日历助手 (官方SDK工具调用)
-    20. 多 Agent 文档审核 (Writer→Reviewer→Editor)
-    21. 代码生成助手 (Structured Output)
-    22. 客服智能分流 (意图识别+路由)
-    23. 内容安全过滤 (敏感词替换+PII脱敏)
-    24. MCP MiniApi 服务 (外部工具集成)
+    19. 上下文压缩策略 (Compression Reducers)
+    20. 对话持久化 (Thread & Database)
+
+    ── 基础设施 ──────────────────────────────────
+    21. 中间件详解 (Middleware Stack)
+    22. 内容安全过滤 (敏感词替换+PII脱敏)
+    23. 监控与指标 (OpenTelemetry)
+    24. 存储策略 (Hot/Cold/Vector)
+    25. 动态脚本热重载 (Natasha Scripting)
+
+    ── 综合场景 ──────────────────────────────────
+    26. 综合场景应用 (Real-world Scenario)
+    27. 媒体生成 (TTS/ASR/图像/视频)
+
     --------------------------------------------------
     0. 退出程序
     ==================================================");
@@ -92,49 +106,49 @@ while (true)
 
     try 
     {
-        switch (choice)
+        switch (choice?.Trim().ToLower())
         {
-            case "1": await ChatDemo.RunAsync(sp); break;
-            case "2": await WorkflowDemo.RunAsync(sp); break;
-            case "3": await StructuredOutputDemo.RunAsync(sp); break;
-            case "4": await ToolDemo.RunAsync(sp); break;
-            case "5": await ScriptingDemo.RunAsync(sp); break;
-            case "6": await CompressionDemo.RunAsync(sp); break;
-            case "7": await PromptDemo.RunAsync(sp); break;
-            case "8": await RagDemo.RunAsync(sp); break;
-            case "9": await MultimodalDemo.RunAsync(sp); break;
-            case "10": await PersistenceDemo.RunAsync(sp); break;
-            case "11": await ScenarioDemo.RunAsync(sp); break;
-            case "12": await BuiltInAgentDemo.RunAsync(sp); break;
-            case "13": await MiddlewareDemo.RunAsync(sp); break;
-            case "14": await McpDemo.RunAsync(sp); break;
-            case "15": await MonitoringDemo.RunAsync(sp); break;
-            case "16": await StorageDemo.RunAsync(sp); break;
-            case "17": await MediaDemo.RunAsync(sp); break;
-            // ★ 新增实用场景
-            case "18": await RagAgentDemo.RunAsync(sp); break;
-            case "19": await McpCalendarDemo.RunAsync(sp); break;
-            case "20": await MultiAgentReviewDemo.RunAsync(sp); break;
-            case "21": await CodeGeneratorDemo.RunAsync(sp); break;
-            case "22": await CustomerServiceDemo.RunAsync(sp); break;
-            case "23": await ContentSafetyDemo.RunAsync(sp); break;
-            case "24": await MiniApiServerDemo.RunAsync(sp); break;
-            case "99": 
-                {
-                    Console.WriteLine("\n=== Inspecting StreamingRun ===");
-                    var runType = typeof(Microsoft.Agents.AI.Workflows.StreamingRun);
-                     foreach (var prop in runType.GetProperties())
-                    {
-                        Console.WriteLine($"[StreamingRun Prop] {prop.Name} : {prop.PropertyType.Name}");
-                    }
-                    foreach (var method in runType.GetMethods())
-                    {
-                         var parameters = string.Join(", ", method.GetParameters().Select(p => $"{p.ParameterType.Name} {p.Name}"));
-                         Console.WriteLine($"[StreamingRun Method] {method.Name}({parameters}) : {method.ReturnType.Name}");
-                    }
+            // ★ 综合性智能体
+            case "1": await UniversalAgentDemo.RunAsync(sp); break;
 
-                } 
-                break;
+            // 对话基础
+            case "2": await ChatDemo.RunAsync(sp); break;
+            case "3": await PromptDemo.RunAsync(sp); break;
+            case "4": await StructuredOutputDemo.RunAsync(sp); break;
+            case "5": await CodeGeneratorDemo.RunAsync(sp); break;
+            case "6": await MultimodalDemo.RunAsync(sp); break;
+
+            // 工具系统
+            case "7": await ToolDemo.RunAsync(sp); break;
+            case "8": await EnhancedToolDemo.RunAsync(sp); break;
+            case "9": await McpDemo.RunAsync(sp); break;
+            case "10": await McpCalendarDemo.RunAsync(sp); break;
+            case "11": await MiniApiServerDemo.RunAsync(sp); break;
+
+            // Agent 与工作流
+            case "12": await BuiltInAgentDemo.RunAsync(sp); break;
+            case "13": await AgentDispatchDemo.RunAsync(sp); break;
+            case "14": await WorkflowDemo.RunAsync(sp); break;
+            case "15": await MultiAgentReviewDemo.RunAsync(sp); break;
+            case "16": await CustomerServiceDemo.RunAsync(sp); break;
+
+            // 数据与知识
+            case "17": await RagDemo.RunAsync(sp); break;
+            case "18": await RagAgentDemo.RunAsync(sp); break;
+            case "19": await CompressionDemo.RunAsync(sp); break;
+            case "20": await PersistenceDemo.RunAsync(sp); break;
+
+            // 基础设施
+            case "21": await MiddlewareDemo.RunAsync(sp); break;
+            case "22": await ContentSafetyDemo.RunAsync(sp); break;
+            case "23": await MonitoringDemo.RunAsync(sp); break;
+            case "24": await StorageDemo.RunAsync(sp); break;
+            case "25": await ScriptingDemo.RunAsync(sp); break;
+
+            // 综合场景
+            case "26": await ScenarioDemo.RunAsync(sp); break;
+            case "27": await MediaDemo.RunAsync(sp); break;
+
             case "0": return;
             default: Console.WriteLine("❌ 无效的选择，请重新输入。"); break;
         }

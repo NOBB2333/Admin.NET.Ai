@@ -6,8 +6,8 @@ using System.Runtime.CompilerServices;
 namespace Admin.NET.Ai.Middleware;
 
 /// <summary>
-/// Token使用监控中间件 (简化版)
-/// 职责: Token 用量记录和成本计算
+/// Token使用监控中间件 (增强版)
+/// 职责: Token 用量记录、成本计算、工具/Agent/Skill 使用追踪
 /// 注意: 配额检查已移至 QuotaCheckMiddleware
 /// UserId 必须通过 ChatOptions.AdditionalProperties["UserId"] 传入
 /// </summary>
@@ -117,6 +117,11 @@ public class TokenMonitoringMiddleware : DelegatingChatClient
         }
 
         stopwatch.Stop();
+
+        // ✅ 修复换行问题: 流式输出后 Console.Write 没有换行，
+        // 导致后续的 logger 输出粘在 AI 回复末尾
+        Console.WriteLine();
+
         await RecordStreamingCompletionAsync(record, context, updates, streamUsage, stopwatch.ElapsedMilliseconds, cancellationToken);
     }
 
@@ -126,7 +131,6 @@ public class TokenMonitoringMiddleware : DelegatingChatClient
 
     private RequestContext CreateRequestContext(ChatOptions? options, IEnumerable<ChatMessage> messages)
     {
-        // UserId 必须从 ChatOptions.AdditionalProperties 传入，框架不处理用户身份逻辑
         var userId = options?.AdditionalProperties?.TryGetValue("UserId", out var uid) == true 
             ? uid?.ToString() ?? "anonymous" 
             : "anonymous";
@@ -156,7 +160,9 @@ public class TokenMonitoringMiddleware : DelegatingChatClient
         return record;
     }
 
-    private async Task RecordCompletionAsync(TokenUsageRecord record, ChatResponse response, RequestContext context, long elapsedMs, CancellationToken ct)
+    private async Task RecordCompletionAsync(
+        TokenUsageRecord record, ChatResponse response, RequestContext context,
+        long elapsedMs, CancellationToken ct)
     {
         var responseText = response.Messages?.LastOrDefault(m => m.Role == ChatRole.Assistant)?.Text;
         var usage = ExtractUsage(response.Usage, record.InputMessage, responseText, out var source);
@@ -184,7 +190,7 @@ public class TokenMonitoringMiddleware : DelegatingChatClient
         RequestContext context,
         string? responseText, 
         string source, 
-        long elapsedMs, 
+        long elapsedMs,
         CancellationToken ct)
     {
         var cost = _tokenStore.CalculateCost(usage, context.ModelName);
@@ -198,9 +204,12 @@ public class TokenMonitoringMiddleware : DelegatingChatClient
 
         await _tokenStore.RecordCompletionAsync(record, ct);
 
+        // ===== 增强日志输出 =====
+        // 基础日志 (Token + 耗时 + 成本)
         _logger.LogInformation(
             "✅ [{Model}] {User} | Token:{In}→{Out}({Source}) | {Duration}ms | ¥{Cost:F4}", 
             context.ModelName, context.UserId, usage.PromptTokens, usage.CompletionTokens, source, elapsedMs, cost);
+
     }
 
     private async Task RecordFailureAsync(TokenUsageRecord record, Exception ex, CancellationToken ct)
@@ -246,3 +255,4 @@ public class TokenMonitoringMiddleware : DelegatingChatClient
 
     #endregion
 }
+

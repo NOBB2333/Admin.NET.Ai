@@ -2,18 +2,22 @@
     "$schema": "https://gitee.com/dotnetchina/Furion/raw/v4/schemas/v4/furion-schema.json",
     "LLM-Rag": {
         "VectorDatabase": {
-            "Type": "Chroma",
-            "ConnectionString": "http://localhost:8000",
+            "Type": "InMemory",
+            "ConnectionString": "",
             "CollectionName": "knowledge_base"
         },
         "Embedding": {
             "Provider": "AliyunBailian",
-            "Model": "text-embedding-v1",
-            "Dimension": 1536
+            "Model": "text-embedding-v3",
+            "Dimension": 1024,
+            "ApiKey": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "BaseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1"
         },
         "Rerank": {
-            "Provider": "SiliconFlow",
+            "Provider": "AliyunBailian",
             "Model": "bge-reranker-v2",
+            "ApiKey": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "BaseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
             "TopK": 3,
             "ScoreThreshold": 0.2
         },

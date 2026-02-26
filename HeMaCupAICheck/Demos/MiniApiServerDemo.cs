@@ -21,7 +21,7 @@ public static class MiniApiServerDemo
 {
     public static async Task RunAsync(IServiceProvider sp)
     {
-        Console.WriteLine("\n========== MCP Server (MiniAPI) 演示 ==========\n");
+        Console.WriteLine("\n=== [11] MCP MiniApi 服务 (外部工具集成) ===\n");
         Console.WriteLine("🌐 正在启动内嵌 Web 服务器...");
 
         const int Port = 5050;

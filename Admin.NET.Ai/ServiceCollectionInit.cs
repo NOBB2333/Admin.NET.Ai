@@ -145,6 +145,10 @@ public static class ServiceCollectionInit
         services.TryAddSingleton<Admin.NET.Ai.Services.Rag.IReranker, Admin.NET.Ai.Services.Rag.HybridReranker>();
         services.TryAddScoped<Admin.NET.Ai.Services.Rag.LocalTextDocumentLoader>();
 
+        // RAG 配置绑定 + Embedding 注册
+        services.Configure<Admin.NET.Ai.Options.LLMRagConfig>(configuration.GetSection("LLM-Rag"));
+        services.AddEmbeddingGenerator(configuration);
+
         // 工作流和代理
         services.TryAddScoped<IWorkflowService, WorkflowService>();
         services.TryAddSingleton<NatashaScriptEngine>();
@@ -188,6 +192,7 @@ public static class ServiceCollectionInit
         services.TryAddScoped<FunctionCallPreservationReducer>();
         services.TryAddScoped<AdaptiveCompressionReducer>();
         services.TryAddScoped<LayeredCompressionReducer>();
+        services.TryAddScoped<ThreeZoneReducer>();
         
         // 注册默认 Reducer (使用 Adaptive 作为默认智能入口)
         services.TryAddScoped<IChatReducer, AdaptiveCompressionReducer>();
@@ -250,6 +255,49 @@ public static class ServiceCollectionInit
         }
         
         Console.WriteLine($"[DI] Registered {clientNames.Count} Keyed ChatClients: {string.Join(", ", clientNames)}");
+    }
+
+    /// <summary>
+    /// 从 LLM-Rag 配置注册 IEmbeddingGenerator
+    /// 支持 OpenAI 兼容接口 (通义千问、硅基流动等)
+    /// </summary>
+    private static void AddEmbeddingGenerator(this IServiceCollection services, IConfiguration configuration)
+    {
+        var embeddingSection = configuration.GetSection("LLM-Rag:Embedding");
+        var model = embeddingSection["Model"];
+        var apiKey = embeddingSection["ApiKey"];
+        var baseUrl = embeddingSection["BaseUrl"];
+        var provider = embeddingSection["Provider"];
+
+        // 如果 RAG 配置的 ApiKey 为空，尝试从 LLM-Clients 中找同名 Provider 的 ApiKey
+        if (string.IsNullOrEmpty(apiKey) && !string.IsNullOrEmpty(provider))
+        {
+            var clientSection = configuration.GetSection($"LLM-Clients:Clients:{provider}");
+            apiKey = clientSection["ApiKey"];
+            baseUrl ??= clientSection["BaseUrl"];
+        }
+
+        if (string.IsNullOrEmpty(apiKey) || string.IsNullOrEmpty(model))
+        {
+            Console.WriteLine("[RAG] ⚠️ Embedding 未配置 (缺少 ApiKey 或 Model)，向量检索不可用");
+            return;
+        }
+
+        services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(sp =>
+        {
+            var options = new OpenAI.OpenAIClientOptions();
+            if (!string.IsNullOrEmpty(baseUrl))
+            {
+                options.Endpoint = new Uri(baseUrl);
+            }
+
+            var client = new OpenAI.OpenAIClient(
+                new System.ClientModel.ApiKeyCredential(apiKey), options);
+
+            return client.GetEmbeddingClient(model).AsIEmbeddingGenerator();
+        });
+
+        Console.WriteLine($"[RAG] ✅ Registered EmbeddingGenerator: {model} @ {baseUrl ?? "api.openai.com"}");
     }
 }
 

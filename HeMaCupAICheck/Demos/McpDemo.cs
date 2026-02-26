@@ -30,7 +30,7 @@ public static class McpDemo
         var logger = loggerFactory.CreateLogger("McpDemo");
         var aiFactory = sp.GetRequiredService<IAiFactory>();
 
-        Console.WriteLine("\n========== MCP 协议演示 ==========\n");
+        Console.WriteLine("\n=== [9] MCP 协议 (外部工具集成) ===\n");
 
         // ===== 1. MCP 概念介绍 =====
         Console.WriteLine("--- 1. MCP (Model Context Protocol) 概念 ---");

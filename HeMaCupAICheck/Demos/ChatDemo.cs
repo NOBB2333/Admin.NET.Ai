@@ -10,7 +10,7 @@ public static class ChatDemo
 {
     public static async Task RunAsync(IServiceProvider sp)
     {
-        Console.WriteLine("\n=== [1] 基础对话与中间件演示 ===");
+        Console.WriteLine("\n=== [2] 基础对话与中间件 (Chat, Audit, Tokens) ===");
         
         var aiFactory = sp.GetRequiredService<IAiFactory>();
         var client = aiFactory.GetDefaultChatClient();    // 获取默认的提供商

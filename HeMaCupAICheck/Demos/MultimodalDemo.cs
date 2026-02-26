@@ -9,7 +9,7 @@ public static class MultimodalDemo
 {
     public static async Task RunAsync(IServiceProvider sp)
     {
-        Console.WriteLine("\n=== [9] 多模态能力演示 (Vision) ===");
+        Console.WriteLine("\n=== [6] 多模态能力 (Vision & Audio) ===");
 
         var aiFactory = sp.GetRequiredService<IAiFactory>();
         // 尝试获取支持 Vision 的客户端，或者使用默认的

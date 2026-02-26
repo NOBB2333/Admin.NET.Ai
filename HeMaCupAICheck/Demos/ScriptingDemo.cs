@@ -8,7 +8,7 @@ public static class ScriptingDemo
 {
     public static async Task RunAsync(IServiceProvider sp)
     {
-        Console.WriteLine("\n=== [5] Natasha 动态脚本热重载演示 ===");
+        Console.WriteLine("\n=== [25] 动态脚本热重载 (Natasha Scripting) ===");
         var scriptEngine = sp.GetRequiredService<NatashaScriptEngine>();
 
         // 从目录加载所有脚本文件

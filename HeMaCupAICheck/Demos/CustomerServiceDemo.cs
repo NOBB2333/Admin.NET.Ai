@@ -24,7 +24,7 @@ public static class CustomerServiceDemo
         var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("CustomerServiceDemo");
         var aiFactory = sp.GetRequiredService<IAiFactory>();
 
-        Console.WriteLine("\n========== 客服智能分流 ==========\n");
+        Console.WriteLine("\n=== [16] 客服智能分流 (意图识别+路由) ===\n");
 
         // ===== 1. 定义专业 Agent =====
         Console.WriteLine("--- 1. 专业客服 Agent ---");

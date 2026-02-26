@@ -24,36 +24,48 @@ Admin.NET.Ai 是基于 **.NET 10** 构建的企业级 AI 能力核心类库。�
 | 特性 | 描述 |
 | :--- | :--- |
 | 🔌 **多模型统一接入** | 无缝切换 OpenAI, DeepSeek, Qwen, Gemini, Ollama 等 |
-| 🤖 **多 Agent 协作** | 顺序/并发/编排者/圆桌讨论模式，多供应商避免同质化 |
+| 🤖 **多 Agent 协作** | 顺序/并发/编排者/圆桌讨论模式，LLM 自主 Agent 发现与调度 |
+| 🔧 **增强工具系统** | 文件系统/搜索/Shell 工具 + 自管理审批 + MCP 协议工具发现 |
 | 🔧 **MCP 工具发现** | `[McpTool]` 属性一键暴露方法为 MCP 工具 |
 | 🎨 **媒体生成** | TTS/ASR/图像生成/视频生成，多供应商支持 |
 | 📚 **混合策略 RAG** | 向量检索 + Neo4j GraphRAG + 重排 (Rerank) |
-| ⚡ **中间件管道** | 缓存/限流/Token计费/审计/重试 |
+| ⚡ **三层中间件管道** | Chat 管道（Token/成本/缓存）+ Tool 管道（审批/监控/验证）+ 限流/审计 |
+| 🗜️ **三区上下文压缩** | 首轮保留 + LLM 摘要中间历史 + 近期消息保留 |
 | 🔥 **热重载脚本** | Natasha C# 脚本引擎，动态更新 Agent 逻辑 |
 | 📊 **全链路可观测** | Trace 时间轴 + DevUI 可视化调试 |
 
 
 ### 📋 功能演示全景 (Console)
 
-| # | 功能模块 | 说明 |
-| :---: | :--- | :--- |
-| 1 | 基础对话与中间件 | Chat, Audit, Tokens |
-| 2 | 多 Agent 工作流 | MAF Sequential & Autonomous |
-| 3 | 结构化数据提取 | JSON Schema, TOON |
-| 4 | 智能工具与审批流 | Discover, Approval |
-| 5 | 动态脚本热重载 | Natasha Scripting |
-| 6 | 上下文压缩策略 | Compression Reducers |
-| 7 | 提示词工程 | Prompt Templates |
-| 8 | RAG 知识检索 | GraphRAG & Vector |
-| 9 | 多模态能力 | Vision & Audio |
-| 10 | 对话持久化 | Thread & Database |
-| 11 | 综合场景应用 | Real-world Scenario |
-| 12 | 内置 Agent | 情感/知识图谱/质量评估 |
-| 13 | 中间件详解 | Middleware Stack |
-| 14 | MCP 协议 | 外部工具集成 |
-| 15 | 监控与指标 | OpenTelemetry |
-| 16 | 存储策略 | Hot/Cold/Vector |
-| **17** | **⭐ 媒体生成** | **TTS/ASR/图像/视频** |
+| # | 分类 | 功能模块 | 说明 |
+| :---: | :--- | :--- | :--- |
+| **★1** | **综合** | **综合性对话智能体** | **All-in-One Agent，全部工具/Agent 自动加载** |
+| 2 | 对话基础 | 基础对话与中间件 | Chat, Audit, Tokens |
+| 3 | 对话基础 | 提示词工程 | Prompt Templates |
+| 4 | 对话基础 | 结构化数据提取 | JSON Schema, TOON |
+| 5 | 对话基础 | 代码生成助手 | Structured Output |
+| 6 | 对话基础 | 多模态能力 | Vision & Audio |
+| 7 | 工具系统 | 智能工具与审批流 | Discover, Approval |
+| 8 | 工具系统 | 增强工具系统 | FileSystem/Search/Shell |
+| 9 | 工具系统 | MCP 协议 | 外部工具集成 |
+| 10 | 工具系统 | MCP 日历助手 | 官方 SDK 工具调用 |
+| 11 | 工具系统 | MCP MiniApi 服务 | 外部工具集成 |
+| 12 | Agent | 内置 Agent | 情感/知识图谱/质量评估 |
+| 13 | Agent | LLM Agent 自主调度 | Auto-Discovery |
+| 14 | Agent | 多 Agent 工作流 | MAF Sequential & Autonomous |
+| 15 | Agent | 多 Agent 文档审核 | Writer→Reviewer→Editor |
+| 16 | Agent | 客服智能分流 | 意图识别+路由 |
+| 17 | 数据 | RAG 知识检索 | GraphRAG & Vector |
+| 18 | 数据 | RAG + Agent 智能问答 | 知识库+推理 |
+| 19 | 数据 | 上下文压缩策略 | 三区压缩/摘要/计数 |
+| 20 | 数据 | 对话持久化 | Thread & Database |
+| 21 | 基础设施 | 中间件详解 | Middleware Stack |
+| 22 | 基础设施 | 内容安全过滤 | 敏感词替换+PII脱敏 |
+| 23 | 基础设施 | 监控与指标 | OpenTelemetry |
+| 24 | 基础设施 | 存储策略 | Hot/Cold/Vector |
+| 25 | 基础设施 | 动态脚本热重载 | Natasha Scripting |
+| 26 | 综合场景 | 综合场景应用 | Real-world Scenario |
+| 27 | 综合场景 | 媒体生成 | TTS/ASR/图像/视频 |
 
 ---
 
@@ -78,6 +90,17 @@ var client = aiFactory.GetDefaultChatClient();
 var response = await client.GetResponseAsync("你好，我是 Admin.NET");
 ```
 
+#### 增强工具系统（自动发现 + 上下文注入）
+```csharp
+var toolManager = sp.GetRequiredService<ToolManager>();
+var context = new ToolExecutionContext
+{
+    WorkingDirectory = Directory.GetCurrentDirectory(),
+    UserId = "user-001"
+};
+var functions = toolManager.GetAllAiFunctions(context); // 自动扫描全部工具并注入上下文
+```
+
 #### 多 Agent 协作
 ```csharp
 var orchestrator = new EnhancedMultiAgentOrchestrator(aiFactory);
@@ -93,21 +116,11 @@ await foreach (var evt in orchestrator.RunDiscussionAsync("AI 对开发的影响
 
 #### MCP 工具
 ```csharp
-[McpTool("获取天气信息")]  // 名称自动取方法名
+[McpTool("获取天气信息")]
 public WeatherInfo GetWeather([McpParameter("城市")] string city)
 {
     return new WeatherInfo { City = city, Temperature = 20 };
 }
-```
-
-#### 图像生成
-```csharp
-var mediaService = sp.GetRequiredService<IMediaGenerationService>();
-var result = await mediaService.GenerateImageAsync(new ImageGenRequest
-{
-    Prompt = "一只可爱的机器猫",
-    Provider = "AliyunBailian"
-});
 ```
 
 ---
@@ -116,10 +129,15 @@ var result = await mediaService.GenerateImageAsync(new ImageGenRequest
 
 ```
 Admin.NET.Ai/
-├── Abstractions/        # 接口定义
+├── Abstractions/        # 接口: IAiFactory, IAiAgent, IAiCallableFunction, IChatReducer
 ├── Core/                # AiFactory, PipelineBuilder
-├── Middleware/          # 缓存/限流/审计/Token计费
+├── Middleware/
+│   ├── TokenMonitoringMiddleware   # Chat 管道: Token/成本/换行
+│   ├── ToolValidationMiddleware    # Tool 管道: 权限/审批/参数/沙箱/脱敏
+│   └── ToolMonitoringMiddleware    # Tool 管道: 分类日志/耗时
 ├── Services/
+│   ├── Tools/           # ToolManager + FileSystem/Search/Shell/AgentDispatch
+│   ├── Context/         # ChatReducerFactory (ThreeZone/Summarizing/MessageCounting)
 │   ├── MCP/             # MCP 协议 + 工具发现
 │   ├── Media/           # TTS/ASR/ImageGen/VideoGen
 │   ├── Rag/             # Vector + GraphRAG
@@ -127,6 +145,20 @@ Admin.NET.Ai/
 ├── Configuration/       # JSON 配置文件
 ├── _doc/                # 用户文档
 └── _doc_Pro/            # 技术详解
+```
+
+### 中间件职责划分
+
+```
+请求 → TokenMonitoringMiddleware (Token/成本)
+         ↓
+      LLM 决定调用工具
+         ↓
+      ToolValidationMiddleware (权限 → 审批 → 参数 → 沙箱 → 脱敏)
+         ↓
+      ToolMonitoringMiddleware (🔧Tool / 🤖Agent / ⚡Skill 分类日志)
+         ↓
+      实际工具执行
 ```
 
 ---
@@ -173,10 +205,8 @@ Admin.NET.Ai/
 dotnet run --project HeMaCupAICheck
 ```
 
-可选择 17 个功能演示:
-1. 基础对话 | 2. 多 Agent 工作流 | 3. 结构化输出 | 4. 工具调用 | 5. 热重载脚本
-6. 上下文压缩 | 7. 提示词 | 8. RAG | 9. 多模态 | 10. 持久化
-12. 内置 Agent | 13. 中间件 | 14. MCP | 15. 监控 | 16. 存储 | **17. 媒体生成**
+选择 **1** 即可进入综合性对话智能体，全部工具和 Agent 自动加载，AI 自主决策调用。
+共 27 个功能演示，按类别分组：对话基础 · 工具系统 · Agent/工作流 · 数据与知识 · 基础设施 · 综合场景。
 
 ---
 

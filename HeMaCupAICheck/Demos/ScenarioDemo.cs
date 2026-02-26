@@ -10,7 +10,7 @@ public static class ScenarioDemo
 {
     public static async Task RunAsync(IServiceProvider sp)
     {
-        Console.WriteLine("\n=== [11] 综合场景演示: 智能知识问答 ===");
+        Console.WriteLine("\n=== [26] 综合场景应用 (Real-world Scenario) ===");
 
         var aiFactory = sp.GetRequiredService<IAiFactory>();
         var ragService = sp.GetService<IGraphRagService>();

@@ -24,7 +24,7 @@ public static class MultiAgentReviewDemo
         var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("MultiAgentReviewDemo");
         var aiFactory = sp.GetRequiredService<IAiFactory>();
 
-        Console.WriteLine("\n========== 多 Agent 文档审核 ==========\n");
+        Console.WriteLine("\n=== [15] 多 Agent 文档审核 (Writer→Reviewer→Editor) ===\n");
 
         // ===== 1. 定义 Agent 角色 =====
         Console.WriteLine("--- 1. Agent 角色定义 ---");

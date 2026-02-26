@@ -8,7 +8,7 @@ public static class PersistenceDemo
 {
     public static async Task RunAsync(IServiceProvider sp)
     {
-        Console.WriteLine("\n=== [10] 对话持久化演示 (MEAI ChatMessage Store) ===");
+        Console.WriteLine("\n=== [20] 对话持久化 (Thread & Database) ===");
 
         var store = sp.GetService<IChatMessageStore>();
         if (store == null)

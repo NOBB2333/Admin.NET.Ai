@@ -18,7 +18,7 @@ public static class MonitoringDemo
         var aiFactory = sp.GetRequiredService<IAiFactory>();
         var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
 
-        Console.WriteLine("\n========== 监控与可观测性演示 ==========\n");
+        Console.WriteLine("\n=== [23] 监控与指标 (OpenTelemetry) ===\n");
 
         // ===== 1. OpenTelemetry 分布式追踪 =====
         Console.WriteLine("--- 1. OpenTelemetry 分布式追踪 ---");

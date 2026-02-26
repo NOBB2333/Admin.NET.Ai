@@ -22,7 +22,9 @@ public enum ReducerType
     /// <summary>系统消息保护</summary>
     SystemMessageProtection,
     /// <summary>函数调用保留</summary>
-    FunctionCallPreservation
+    FunctionCallPreservation,
+    /// <summary>三区保护压缩 (Zone A + 摘要 + Zone B)</summary>
+    ThreeZone
 }
 
 /// <summary>
@@ -51,6 +53,7 @@ public class ChatReducerFactory
             ReducerType.Layered => _serviceProvider.GetRequiredService<LayeredCompressionReducer>(),
             ReducerType.SystemMessageProtection => _serviceProvider.GetRequiredService<SystemMessageProtectionReducer>(),
             ReducerType.FunctionCallPreservation => _serviceProvider.GetRequiredService<FunctionCallPreservationReducer>(),
+            ReducerType.ThreeZone => _serviceProvider.GetRequiredService<ThreeZoneReducer>(),
             _ => throw new ArgumentException($"Unknown reducer type: {type}")
         };
     }

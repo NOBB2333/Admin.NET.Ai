@@ -50,7 +50,7 @@ public static class RagAgentDemo
             d => d.Content
         );
 
-        Console.WriteLine("\n========== RAG + Agent 智能问答 ==========\n");
+        Console.WriteLine("\n=== [18] RAG + Agent 智能问答 (知识库+推理) ===\n");
 
         // ===== 1. 展示知识库 =====
         Console.WriteLine("--- 1. 企业知识库内容 ---");

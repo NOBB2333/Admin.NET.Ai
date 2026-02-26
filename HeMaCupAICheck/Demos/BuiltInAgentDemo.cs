@@ -16,7 +16,7 @@ public static class BuiltInAgentDemo
         var aiFactory = sp.GetRequiredService<IAiFactory>();
         var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
 
-        Console.WriteLine("\n========== 内置 Agent 演示 ==========\n");
+        Console.WriteLine("\n=== [12] 内置 Agent (情感/知识图谱/质量评估) ===\n");
 
         // 获取默认 ChatClient
         var chatClient = aiFactory.GetDefaultChatClient();

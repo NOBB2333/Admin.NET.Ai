@@ -24,7 +24,7 @@ public static class CodeGeneratorDemo
         var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("CodeGeneratorDemo");
         var aiFactory = sp.GetRequiredService<IAiFactory>();
 
-        Console.WriteLine("\n========== 代码生成助手 ==========\n");
+        Console.WriteLine("\n=== [5] 代码生成助手 (Structured Output) ===\n");
 
         // ===== 1. 需求输入 =====
         Console.WriteLine("--- 1. 需求描述 ---");

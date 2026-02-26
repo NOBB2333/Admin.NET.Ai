@@ -17,7 +17,7 @@ public static class MiddlewareDemo
         var aiFactory = sp.GetRequiredService<IAiFactory>();
         var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
 
-        Console.WriteLine("\n========== 中间件演示 ==========\n");
+        Console.WriteLine("\n=== [21] 中间件详解 (Middleware Stack) ===\n");
 
         // 1. 获取基础 ChatClient
         var baseClient = aiFactory.GetDefaultChatClient();

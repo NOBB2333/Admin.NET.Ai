@@ -8,7 +8,7 @@ public static class ToolDemo
 {
     public static async Task RunAsync(IServiceProvider sp)
     {
-        Console.WriteLine("\n=== [4] 智能工具与审批流程 ===");
+        Console.WriteLine("\n=== [7] 智能工具与审批流 (Discover, Approval) ===");
 
         // 1. 自动发现工具
         var toolManager = sp.GetRequiredService<ToolManager>();

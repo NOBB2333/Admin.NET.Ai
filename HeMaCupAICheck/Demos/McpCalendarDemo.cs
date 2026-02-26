@@ -44,7 +44,7 @@ public static class McpCalendarDemo
         var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("McpCalendarDemo");
         var aiFactory = sp.GetRequiredService<IAiFactory>();
 
-        Console.WriteLine("\n========== 智能助手 (天气 + 节假日) ==========\n");
+        Console.WriteLine("\n=== [10] MCP 日历助手 (官方SDK工具调用) ===\n");
 
         // ===== 1. 定义工具函数 =====
         Console.WriteLine("--- 1. 工具函数定义 ---");

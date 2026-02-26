@@ -13,7 +13,7 @@ public static class ContentSafetyDemo
 {
     public static async Task RunAsync(IServiceProvider sp)
     {
-        Console.WriteLine("\n========== 内容安全中间件演示 ==========");
+        Console.WriteLine("\n=== [22] 内容安全过滤 (敏感词替换+PII脱敏) ===\n");
         Console.WriteLine("功能: 敏感词过滤 | 自定义替换词 | PII脱敏 | 流式输出安全检测\n");
         
         var aiFactory = sp.GetRequiredService<IAiFactory>();

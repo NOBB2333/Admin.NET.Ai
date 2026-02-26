@@ -1,4 +1,5 @@
 using Admin.NET.Ai.Abstractions;
+using Admin.NET.Ai.Services.Tools;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
@@ -7,24 +8,34 @@ namespace Admin.NET.Ai.Middleware;
 
 /// <summary>
 /// 工具验证中间件
-/// 验证工具调用参数和结果
+/// 职责: 权限检查 → 自管理审批 → 参数验证 → 沙箱执行 → 结果脱敏
+/// 与 ToolManager 联动支持 IAiCallableFunction.RequiresApproval()
 /// </summary>
 public class ToolValidationMiddleware : IToolCallingMiddleware
 {
     private readonly ILogger<ToolValidationMiddleware> _logger;
     private readonly IToolPermissionManager? _permissionManager;
     private readonly IToolExecutionSandbox? _sandbox;
+    private readonly ToolManager? _toolManager;
     private readonly ToolValidationOptions _options;
+
+    /// <summary>
+    /// 审批回调：工具名 + 参数JSON → 是否批准
+    /// 可以是 Console 交互、API 调用、UI 弹窗等
+    /// </summary>
+    public Func<string, string, Task<bool>>? ApprovalCallback { get; set; }
 
     public ToolValidationMiddleware(
         ILogger<ToolValidationMiddleware> logger,
         IToolPermissionManager? permissionManager = null,
         IToolExecutionSandbox? sandbox = null,
+        ToolManager? toolManager = null,
         ToolValidationOptions? options = null)
     {
         _logger = logger;
         _permissionManager = permissionManager;
         _sandbox = sandbox;
+        _toolManager = toolManager;
         _options = options ?? new ToolValidationOptions();
     }
 
@@ -35,7 +46,7 @@ public class ToolValidationMiddleware : IToolCallingMiddleware
 
         _logger.LogInformation("🔍 [Validation] 验证工具调用: {Tool}", toolName);
 
-        // 1. 权限检查
+        // 1. 规则权限检查 (ToolPermissionManager — 基于角色/频率/级别)
         if (_permissionManager != null && _options.EnablePermissionCheck)
         {
             var userId = GetUserId(context);
@@ -57,7 +68,39 @@ public class ToolValidationMiddleware : IToolCallingMiddleware
             }
         }
 
-        // 2. 参数验证
+        // 2. 工具自管理审批 (IAiCallableFunction.RequiresApproval — 基于参数动态判断)
+        if (_options.EnableSelfManagedApproval)
+        {
+            var toolMeta = _toolManager?.GetAllTools()
+                .FirstOrDefault(t => t.Name == toolName || 
+                    t.GetFunctions().Any(f => f.Name == toolName));
+
+            if (toolMeta != null && toolMeta.RequiresApproval(arguments))
+            {
+                _logger.LogWarning("⚠️ [Validation] 工具请求审批: {Tool}", toolName);
+
+                if (ApprovalCallback != null)
+                {
+                    var argsJson = arguments != null ? JsonSerializer.Serialize(arguments) : "{}";
+                    var approved = await ApprovalCallback(toolName, argsJson);
+                    if (!approved)
+                    {
+                        _logger.LogWarning("🚫 [Validation] 用户拒绝审批: {Tool}", toolName);
+                        return new ToolResponse
+                        {
+                            Result = $"[Approval Denied] 用户拒绝了工具 '{toolName}' 的调用"
+                        };
+                    }
+                    _logger.LogInformation("✅ [Validation] 用户批准: {Tool}", toolName);
+                }
+                else
+                {
+                    _logger.LogWarning("⚠️ [Validation] 工具需要审批但未配置 ApprovalCallback，默认放行: {Tool}", toolName);
+                }
+            }
+        }
+
+        // 3. 参数验证
         if (_options.ValidateArguments && arguments != null)
         {
             var validationErrors = ValidateArguments(toolName, arguments);
@@ -76,7 +119,7 @@ public class ToolValidationMiddleware : IToolCallingMiddleware
             }
         }
 
-        // 3. 沙箱执行
+        // 4. 沙箱执行
         ToolResponse response;
         if (_sandbox != null && _options.UseSandbox)
         {
@@ -109,13 +152,13 @@ public class ToolValidationMiddleware : IToolCallingMiddleware
             response = await next(context);
         }
 
-        // 4. 结果验证和脱敏
+        // 5. 结果验证和脱敏
         if (_options.SanitizeResult && response.Result != null)
         {
             response.Result = SanitizeResult(response.Result);
         }
 
-        // 5. 结果截断
+        // 6. 结果截断
         if (_options.MaxResultSize > 0 && response.Result != null)
         {
             var resultStr = response.Result.ToString() ?? "";
@@ -132,7 +175,6 @@ public class ToolValidationMiddleware : IToolCallingMiddleware
 
     private string GetUserId(ToolCallingContext context)
     {
-        // 尝试从上下文获取用户 ID
         if (context.ServiceProvider != null)
         {
             var httpContextAccessor = context.ServiceProvider.GetService(
@@ -151,10 +193,8 @@ public class ToolValidationMiddleware : IToolCallingMiddleware
     {
         var errors = new List<string>();
 
-        // 通用验证规则
         foreach (var (key, value) in arguments)
         {
-            // 检查 SQL 注入风险
             if (value is string strValue)
             {
                 if (ContainsSqlInjection(strValue))
@@ -162,7 +202,6 @@ public class ToolValidationMiddleware : IToolCallingMiddleware
                     errors.Add($"参数 '{key}' 包含潜在的 SQL 注入");
                 }
 
-                // 检查路径遍历风险
                 if (key.Contains("path", StringComparison.OrdinalIgnoreCase) 
                     && (strValue.Contains("..") || strValue.Contains("~/")))
                 {
@@ -184,7 +223,6 @@ public class ToolValidationMiddleware : IToolCallingMiddleware
     {
         var str = result.ToString() ?? "";
         
-        // 脱敏敏感信息
         var patterns = new Dictionary<string, string>
         {
             { "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\\b", "[EMAIL]" },
@@ -209,6 +247,10 @@ public class ToolValidationMiddleware : IToolCallingMiddleware
 public class ToolValidationOptions
 {
     public bool EnablePermissionCheck { get; set; } = true;
+    /// <summary>
+    /// 启用工具自管理审批 (IAiCallableFunction.RequiresApproval)
+    /// </summary>
+    public bool EnableSelfManagedApproval { get; set; } = true;
     public bool ValidateArguments { get; set; } = true;
     public bool RejectInvalidArguments { get; set; } = false;
     public bool UseSandbox { get; set; } = true;

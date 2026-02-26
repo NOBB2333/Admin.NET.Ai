@@ -8,7 +8,7 @@ public static class PromptDemo
 {
     public static async Task RunAsync(IServiceProvider sp)
     {
-        Console.WriteLine("\n=== [7] 提示词工程演示 ===");
+        Console.WriteLine("\n=== [3] 提示词工程 (Prompt Templates) ===");
 
         var promptManager = sp.GetRequiredService<IPromptManager>();
 

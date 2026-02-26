@@ -14,7 +14,7 @@ public static class WorkflowDemo
 {
     public static async Task RunAsync(IServiceProvider sp)
     {
-        Console.WriteLine("\n=== [MAF Workflow] 工作流演示 ===\n");
+        Console.WriteLine("\n=== [14] 多 Agent 工作流 (MAF Sequential & Autonomous) ===\n");
         
         var aiFactory = sp.GetRequiredService<IAiFactory>();
         var providers = aiFactory.GetAvailableClients();
