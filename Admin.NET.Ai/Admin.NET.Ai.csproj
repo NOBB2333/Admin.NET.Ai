@@ -9,18 +9,18 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Furion.Pure" Version="4.9.8.10" />
+        <PackageReference Include="Furion.Pure" Version="4.9.8.20" />
 
         <!--  AI 部分 -->
-        <PackageReference Include="Microsoft.Agents.AI" Version="1.0.0-rc1" />
+        <PackageReference Include="Microsoft.Agents.AI" Version="1.0.0-rc3" />
 
         <!--        工作流和界面调试-->
-        <PackageReference Include="Microsoft.Agents.AI.DevUI" Version="1.0.0-preview.260219.1" />
-        <PackageReference Include="Microsoft.Agents.AI.Workflows" Version="1.0.0-rc1" />
+        <PackageReference Include="Microsoft.Agents.AI.DevUI" Version="1.0.0-preview.260304.1" />
+        <PackageReference Include="Microsoft.Agents.AI.Workflows" Version="1.0.0-rc3" />
         <!-- Azure Native Client -->
         <PackageReference Include="Azure.AI.OpenAI" Version="2.8.0-beta.1" />
         <!-- OpenAI Native Client -->
-        <PackageReference Include="OpenAI" Version="2.8.0" />
+        <PackageReference Include="OpenAI" Version="2.9.1" />
         <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.3.0" />
         <PackageReference Include="Microsoft.Extensions.AI" Version="10.3.0" />
         <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.2" />
@@ -29,12 +29,12 @@
         <PackageReference Include="ModelContextProtocol" Version="*-*" />
 
         <!-- Semantic Kernel -->
-        <PackageReference Include="Microsoft.SemanticKernel" Version="1.72.0" />
-        <PackageReference Include="Microsoft.SemanticKernel.Connectors.OpenAI" Version="1.72.0" />
+        <PackageReference Include="Microsoft.SemanticKernel" Version="1.73.0" />
+        <PackageReference Include="Microsoft.SemanticKernel.Connectors.OpenAI" Version="1.73.0" />
 
         <!-- Database -->
         <PackageReference Include="Neo4j.Driver" Version="6.0.0" />
-        <PackageReference Include="Polly" Version="8.6.5" />
+        <PackageReference Include="Polly" Version="8.6.6" />
         <PackageReference Include="SqlSugarCore" Version="5.1.4.210" />
         
         <!-- Toon 格式序列化支持 -->
@@ -44,9 +44,9 @@
 
     <ItemGroup>
         <!-- 热重载相关的娜塔莎组件 -->
-        <PackageReference Include="DotNetCore.Natasha.Domain" Version="9.0.0.1" />
-        <PackageReference Include="DotNetCore.Natasha.CSharp.Compiler" Version="9.0.0.4" />
-        <PackageReference Include="DotNetCore.Natasha.CSharp.Compiler.Domain" Version="9.0.0.1" />
+        <PackageReference Include="DotNetCore.Natasha.Domain" Version="10.0.0" />
+        <PackageReference Include="DotNetCore.Natasha.CSharp.Compiler" Version="10.0.0.1" />
+        <PackageReference Include="DotNetCore.Natasha.CSharp.Compiler.Domain" Version="10.0.0" />
         <PackageReference Include="DotNetCore.Compile.Environment" Version="3.2.0" />
         <!-- 解决 Roslyn 版本冲突 -->
         <PackageReference Include="Microsoft.CodeAnalysis.Common" Version="5.0.0" />
