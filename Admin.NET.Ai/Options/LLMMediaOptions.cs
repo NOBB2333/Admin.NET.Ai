@@ -20,6 +20,12 @@ public sealed class LLMTtsConfig
 /// </summary>
 public sealed class TtsVoiceConfig
 {
+    /// <summary> API 密钥（可选） </summary>
+    public string? ApiKey { get; set; }
+
+    /// <summary> API 基础地址（可选） </summary>
+    public string? BaseUrl { get; set; }
+
     /// <summary> 使用的语音模型 </summary>
     public string? Model { get; set; }
 
@@ -32,8 +38,11 @@ public sealed class TtsVoiceConfig
     /// <summary> 情感/语气 </summary>
     public string? Style { get; set; }
 
+    /// <summary> 是否流式 </summary>
+    public bool Stream { get; set; }
+
     /// <summary> 采样率 </summary>
-    public int SampleRate { get; set; }
+    public int SampleRate { get; set; } = 24000;
 }
 
 /// <summary>

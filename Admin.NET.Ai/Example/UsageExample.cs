@@ -37,9 +37,9 @@ public class UsageExample
             };
             options.LLMMcp = new Admin.NET.Ai.Options.LLMMcpConfig 
             {
-                Servers = new List<Admin.NET.Ai.Options.McpServerConfig>
+                Servers = new Dictionary<string, Admin.NET.Ai.Options.McpServerConfig>
                 {
-                    new() { Name = "GitHub-MCP", Enabled = true, Url = "http://localhost:3000/sse" }
+                    ["GitHub-MCP"] = new() { Name = "GitHub-MCP", Enable = true, TransportType = "sse", BaseUrl = "http://localhost:3000/sse" }
                 }
             };
         });

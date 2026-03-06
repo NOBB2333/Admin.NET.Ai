@@ -43,17 +43,17 @@ public class McpToolFactory : IAsyncDisposable
     {
         var allTools = new List<AITool>();
 
-        foreach (var serverConfig in _options.Value.Servers.Where(s => s.Enabled))
+        foreach (var (serverKey, serverConfig) in _options.Value.Servers.Where(s => s.Value.Enable))
         {
             try
             {
-                var tools = await GetServerToolsAsync(serverConfig.Name);
+                var tools = await GetServerToolsAsync(serverKey);
                 allTools.AddRange(tools);
-                _logger.LogInformation("✅ [MCP] 加载 {Count} 个工具: {Server}", tools.Count, serverConfig.Name);
+                _logger.LogInformation("✅ [MCP] 加载 {Count} 个工具: {Server}", tools.Count, serverKey);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "❌ [MCP] 加载工具失败: {Server}", serverConfig.Name);
+                _logger.LogError(ex, "❌ [MCP] 加载工具失败: {Server}", serverKey);
             }
         }
 
@@ -140,7 +140,7 @@ public class McpToolFactory : IAsyncDisposable
             var config = GetServerConfig(serverName);
             _logger.LogInformation("🔌 [MCP] 连接: {Server}", serverName);
 
-            var client = await CreateClientAsync(config);
+            var client = await CreateClientAsync(serverName, config);
             _clients[serverName] = client;
 
             _logger.LogInformation("✅ [MCP] 已连接: {Server} (Tools={Tools}, Resources={Resources})",
@@ -158,19 +158,18 @@ public class McpToolFactory : IAsyncDisposable
 
     private McpServerConfig GetServerConfig(string serverName)
     {
-        var config = _options.Value.Servers.FirstOrDefault(s => s.Name == serverName);
-        if (config == null)
+        if (!_options.Value.Servers.TryGetValue(serverName, out var config))
         {
             throw new ArgumentException($"MCP 服务器配置不存在: {serverName}");
         }
         return config;
     }
 
-    private async Task<McpClient> CreateClientAsync(McpServerConfig config)
+    private async Task<McpClient> CreateClientAsync(string serverName, McpServerConfig config)
     {
         var transport = new StdioClientTransport(new StdioClientTransportOptions
         {
-            Name = config.Name,
+            Name = string.IsNullOrWhiteSpace(config.Name) ? serverName : config.Name,
             Command = config.Command ?? "dotnet",
             Arguments = config.Arguments ?? []
         });

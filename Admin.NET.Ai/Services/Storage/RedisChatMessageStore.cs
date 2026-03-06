@@ -1,5 +1,6 @@
 using Admin.NET.Ai.Abstractions;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
 
 namespace Admin.NET.Ai.Storage;
 
@@ -9,32 +10,55 @@ namespace Admin.NET.Ai.Storage;
 public class RedisChatMessageStore : ChatMessageStoreBase
 {
     // private readonly IConnectionMultiplexer _redis;
+    private readonly FileChatMessageStore _fallbackStore;
+    private readonly ILogger<RedisChatMessageStore> _logger;
+    private int _fallbackLogState;
     
-    public RedisChatMessageStore(/* IConnectionMultiplexer redis */)
+    public RedisChatMessageStore(
+        FileChatMessageStore fallbackStore,
+        ILogger<RedisChatMessageStore> logger
+        /* IConnectionMultiplexer redis */)
     {
+        _fallbackStore = fallbackStore;
+        _logger = logger;
         // _redis = redis;
     }
 
-    public override async Task<IList<ChatMessage>> GetHistoryAsync(string sessionId, CancellationToken cancellationToken = default)
+    public override Task<IList<ChatMessage>> GetHistoryAsync(string sessionId, CancellationToken cancellationToken = default)
     {
-        // var db = _redis.GetDatabase();
-        // var json = await db.StringGetAsync($"chat:{sessionId}");
-        // if (json.HasValue) { ... deserialize ... }
-        return await Task.FromResult<IList<ChatMessage>>(new List<ChatMessage>());
+        LogFallbackOnce();
+        return _fallbackStore.GetHistoryAsync(sessionId, cancellationToken);
     }
 
-    public override async Task SaveMessageAsync(string sessionId, ChatMessage message, CancellationToken cancellationToken = default)
+    public override Task SaveMessageAsync(string sessionId, ChatMessage message, CancellationToken cancellationToken = default)
     {
-        // var db = _redis.GetDatabase();
-        // var item = JsonSerializer.Serialize(message);
-        // await db.ListRightPushAsync($"chat_history:{sessionId}", item);
-        await Task.CompletedTask;
+        LogFallbackOnce();
+        return _fallbackStore.SaveMessageAsync(sessionId, message, cancellationToken);
     }
 
-    public override async Task ClearHistoryAsync(string sessionId, CancellationToken cancellationToken = default)
+    public override Task ClearHistoryAsync(string sessionId, CancellationToken cancellationToken = default)
     {
-        // var db = _redis.GetDatabase();
-        // await db.KeyDeleteAsync($"chat_history:{sessionId}");
-        await Task.CompletedTask;
+        LogFallbackOnce();
+        return _fallbackStore.ClearHistoryAsync(sessionId, cancellationToken);
+    }
+
+    public override Task SaveMessagesAsync(string sessionId, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken = default)
+    {
+        LogFallbackOnce();
+        return _fallbackStore.SaveMessagesAsync(sessionId, messages, cancellationToken);
+    }
+
+    public override Task ReplaceHistoryAsync(string sessionId, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken = default)
+    {
+        LogFallbackOnce();
+        return _fallbackStore.ReplaceHistoryAsync(sessionId, messages, cancellationToken);
+    }
+
+    private void LogFallbackOnce()
+    {
+        if (Interlocked.Exchange(ref _fallbackLogState, 1) == 0)
+        {
+            _logger.LogWarning("RedisChatMessageStore 尚未接入真实 Redis，已自动回退到 FileChatMessageStore。");
+        }
     }
 }

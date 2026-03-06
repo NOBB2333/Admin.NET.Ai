@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
 using OAI = OpenAI.Chat;
 
 namespace Admin.NET.Ai.Core;
@@ -13,11 +14,16 @@ public sealed class OpenAIChatClientAdapter : IChatClient
 {
     private readonly OAI.ChatClient _client;
     private readonly string? _modelId;
+    private readonly ILogger<OpenAIChatClientAdapter>? _logger;
 
-    public OpenAIChatClientAdapter(OAI.ChatClient client, string? modelId = null)
+    public OpenAIChatClientAdapter(
+        OAI.ChatClient client,
+        string? modelId = null,
+        ILogger<OpenAIChatClientAdapter>? logger = null)
     {
         _client = client ?? throw new ArgumentNullException(nameof(client));
         _modelId = modelId;
+        _logger = logger;
     }
 
     public ChatClientMetadata Metadata => new(nameof(OpenAIChatClientAdapter), null, _modelId);
@@ -195,7 +201,7 @@ public sealed class OpenAIChatClientAdapter : IChatClient
             catch (Exception ex)
             {
                 // 下载失败，回退到传递 URL
-                Console.WriteLine($"[OpenAIChatClientAdapter] Image download failed: {ex.Message}. Falling back to URL.");
+                _logger?.LogWarning(ex, "Image download failed. Falling back to URL");
                 return OAI.ChatMessageContentPart.CreateImagePart(uc.Uri);
             }
         }

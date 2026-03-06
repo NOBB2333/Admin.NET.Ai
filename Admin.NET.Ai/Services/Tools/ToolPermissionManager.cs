@@ -23,22 +23,8 @@ public class ToolPermissionManager : IToolPermissionManager
 
     private void InitializeDefaultRules()
     {
-        // 默认规则：危险操作
-        RegisterRule(new ToolPermissionRule
-        {
-            ToolNamePattern = "delete_*",
-            Level = PermissionLevel.Dangerous,
-            AllowedRoles = new HashSet<string> { "admin" },
-            RequireAudit = true
-        });
-
-        RegisterRule(new ToolPermissionRule
-        {
-            ToolNamePattern = "execute_*",
-            Level = PermissionLevel.Sensitive,
-            MaxCallsPerMinute = 10,
-            RequireAudit = true
-        });
+        // 类库默认不内置工具枚举规则。
+        // 业务方可通过 RegisterRule 注入确定性策略。
     }
 
     public void RegisterRule(ToolPermissionRule rule)
@@ -47,65 +33,54 @@ public class ToolPermissionManager : IToolPermissionManager
         _logger.LogDebug("📋 [Permission] 注册规则: {Pattern}", rule.ToolNamePattern);
     }
 
-    public async Task<ToolPermissionResult> CheckPermissionAsync(string userId, string toolName, IDictionary<string, object?>? arguments = null)
+    public Task<ToolPermissionResult> CheckPermissionAsync(string toolName, IDictionary<string, object?>? arguments = null)
     {
-        _logger.LogDebug("🔐 [Permission] 检查权限: User={User}, Tool={Tool}", userId, toolName);
+        _logger.LogDebug("🔐 [Permission] 检查权限: Tool={Tool}", toolName);
+
+        if (string.IsNullOrWhiteSpace(toolName))
+        {
+            return Task.FromResult(ToolPermissionResult.Deny("工具名不能为空"));
+        }
 
         // 查找匹配的规则
         var matchingRules = _rules.Where(r => MatchesPattern(toolName, r.ToolNamePattern)).ToList();
 
         foreach (var rule in matchingRules)
         {
-            // 1. 角色检查
-            var userRoles = await GetUserRolesAsync(userId);
-            
-            if (rule.DeniedRoles.Any() && userRoles.Any(r => rule.DeniedRoles.Contains(r)))
+            // 频率限制
+            if (!CheckRateLimit(toolName, rule.MaxCallsPerMinute))
             {
-                return ToolPermissionResult.Deny($"角色被禁止访问此工具");
+                return Task.FromResult(ToolPermissionResult.Deny($"超出调用频率限制 ({rule.MaxCallsPerMinute}/分钟)"));
             }
 
-            if (rule.AllowedRoles.Any() && !userRoles.Any(r => rule.AllowedRoles.Contains(r)))
-            {
-                return ToolPermissionResult.Deny($"需要以下角色之一: {string.Join(", ", rule.AllowedRoles)}");
-            }
-
-            // 2. 频率限制
-            if (!CheckRateLimit(userId, toolName, rule.MaxCallsPerMinute))
-            {
-                return ToolPermissionResult.Deny($"超出调用频率限制 ({rule.MaxCallsPerMinute}/分钟)");
-            }
-
-            // 3. 权限级别检查
+            // 权限级别检查
             if (rule.Level == PermissionLevel.Forbidden)
             {
-                return ToolPermissionResult.Deny("此工具已被禁用");
+                return Task.FromResult(ToolPermissionResult.Deny("此工具已被禁用"));
             }
 
             // 记录审计
             if (rule.RequireAudit)
             {
-                _logger.LogWarning("⚠️ [Audit] 敏感工具调用: User={User}, Tool={Tool}, Level={Level}", 
-                    userId, toolName, rule.Level);
+                _logger.LogWarning("⚠️ [Audit] 敏感工具调用: Tool={Tool}, Level={Level}", toolName, rule.Level);
             }
 
-            return new ToolPermissionResult { IsAllowed = true, Level = rule.Level };
+            return Task.FromResult(new ToolPermissionResult { IsAllowed = true, Level = rule.Level });
         }
 
-        // 没有匹配规则，默认允许
-        RecordCall(userId, toolName);
-        return ToolPermissionResult.Allow();
+        // 无匹配规则：默认按普通风险放行，风险判定交给模型审批层。
+        RecordCall(toolName);
+        return Task.FromResult(ToolPermissionResult.Allow());
     }
 
-    public async Task<IEnumerable<string>> GetAllowedToolsAsync(string userId)
+    public Task<IEnumerable<string>> GetAllowedToolsAsync()
     {
-        // 简化实现：返回所有非禁止的工具
-        var userRoles = await GetUserRolesAsync(userId);
-        
-        return _rules
+        var allowed = _rules
             .Where(r => r.Level != PermissionLevel.Forbidden)
-            .Where(r => !r.AllowedRoles.Any() || userRoles.Any(ur => r.AllowedRoles.Contains(ur)))
             .Select(r => r.ToolNamePattern ?? "*")
             .Distinct();
+
+        return Task.FromResult<IEnumerable<string>>(allowed.ToList());
     }
 
     private bool MatchesPattern(string toolName, string? pattern)
@@ -116,9 +91,14 @@ public class ToolPermissionManager : IToolPermissionManager
         return Regex.IsMatch(toolName, regexPattern, RegexOptions.IgnoreCase);
     }
 
-    private bool CheckRateLimit(string userId, string toolName, int maxPerMinute)
+    private bool CheckRateLimit(string toolName, int maxPerMinute)
     {
-        var key = $"{userId}:{toolName}";
+        if (maxPerMinute <= 0)
+        {
+            return true;
+        }
+
+        var key = toolName;
         var now = DateTime.UtcNow;
         var windowStart = now.AddMinutes(-1);
 
@@ -143,26 +123,14 @@ public class ToolPermissionManager : IToolPermissionManager
         return true;
     }
 
-    private void RecordCall(string userId, string toolName)
+    private void RecordCall(string toolName)
     {
-        var key = $"{userId}:{toolName}";
+        var key = toolName;
         var calls = _callTracker.GetOrAdd(key, _ => new Queue<DateTime>());
         lock (calls)
         {
             calls.Enqueue(DateTime.UtcNow);
         }
-    }
-
-    private Task<HashSet<string>> GetUserRolesAsync(string userId)
-    {
-        // 简化实现：从 userId 推断角色
-        // 生产环境应该从 Identity/Claims 系统获取
-        var roles = new HashSet<string> { "user" };
-        if (userId.Contains("admin", StringComparison.OrdinalIgnoreCase))
-        {
-            roles.Add("admin");
-        }
-        return Task.FromResult(roles);
     }
 }
 

@@ -1,5 +1,4 @@
 using Admin.NET.Ai.Abstractions;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
@@ -14,18 +13,15 @@ namespace Admin.NET.Ai.Middleware;
 public class LoggingMiddleware : DelegatingChatClient
 {
     private readonly ILogger<LoggingMiddleware> _logger;
-    private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly bool _enableSensitiveDataLogging;
 
     public LoggingMiddleware(
         IChatClient innerClient,
         ILogger<LoggingMiddleware> logger,
-        IHttpContextAccessor httpContextAccessor,
         bool enableSensitiveDataLogging = false) // 可从配置中注入
         : base(innerClient)
     {
         _logger = logger;
-        _httpContextAccessor = httpContextAccessor;
         _enableSensitiveDataLogging = enableSensitiveDataLogging;
     }
 
@@ -34,21 +30,29 @@ public class LoggingMiddleware : DelegatingChatClient
         var requestId = Guid.NewGuid().ToString("N");
         var model = options?.ModelId ?? "default";
         var stopwatch = Stopwatch.StartNew();
+        var logContext = CreateLogContext(options);
         
-        LogRequest(requestId, model, chatMessages);
+        LogRequest(requestId, model, chatMessages, logContext);
 
         try
         {
             var response = await base.GetResponseAsync(chatMessages, options, cancellationToken);
             stopwatch.Stop();
 
-            LogResponse(requestId, stopwatch.ElapsedMilliseconds, response);
+            LogResponse(requestId, stopwatch.ElapsedMilliseconds, response, logContext);
             return response;
         }
         catch (Exception ex)
         {
             stopwatch.Stop();
-            _logger.LogError(ex, "❌ [Req:{RequestId}] 调用失败. 耗时: {Elapsed}ms", requestId, stopwatch.ElapsedMilliseconds);
+            _logger.LogError(
+                ex,
+                "❌ [Req:{RequestId}] 调用失败. 耗时: {Elapsed}ms. TraceId: {TraceId}. SpanId: {SpanId}. SessionId: {SessionId}",
+                requestId,
+                stopwatch.ElapsedMilliseconds,
+                logContext.TraceId,
+                logContext.SpanId,
+                logContext.SessionId);
             throw;
         }
     }
@@ -58,8 +62,9 @@ public class LoggingMiddleware : DelegatingChatClient
         var requestId = Guid.NewGuid().ToString("N");
         var model = options?.ModelId ?? "default";
         var stopwatch = Stopwatch.StartNew();
+        var logContext = CreateLogContext(options);
 
-        LogRequest(requestId, model, chatMessages);
+        LogRequest(requestId, model, chatMessages, logContext);
 
         int updateCount = 0;
         
@@ -72,7 +77,14 @@ public class LoggingMiddleware : DelegatingChatClient
         catch (Exception ex)
         {
              stopwatch.Stop();
-             _logger.LogError(ex, "❌ [Req:{RequestId}] 流式连接失败. 耗时: {Elapsed}ms", requestId, stopwatch.ElapsedMilliseconds);
+             _logger.LogError(
+                 ex,
+                 "❌ [Req:{RequestId}] 流式连接失败. 耗时: {Elapsed}ms. TraceId: {TraceId}. SpanId: {SpanId}. SessionId: {SessionId}",
+                 requestId,
+                 stopwatch.ElapsedMilliseconds,
+                 logContext.TraceId,
+                 logContext.SpanId,
+                 logContext.SessionId);
              throw;
         }
 
@@ -87,7 +99,13 @@ public class LoggingMiddleware : DelegatingChatClient
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "❌ [Req:{RequestId}] 流式读取异常", requestId);
+                    _logger.LogError(
+                        ex,
+                        "❌ [Req:{RequestId}] 流式读取异常. TraceId: {TraceId}. SpanId: {SpanId}. SessionId: {SessionId}",
+                        requestId,
+                        logContext.TraceId,
+                        logContext.SpanId,
+                        logContext.SessionId);
                     throw;
                 }
 
@@ -100,48 +118,96 @@ public class LoggingMiddleware : DelegatingChatClient
         }
         
         stopwatch.Stop();
-        _logger.LogDebug("⬅️ [Req:{RequestId}] 流式调用结束. 耗时: {Elapsed}ms. Chunks: {Count}", 
-            requestId, stopwatch.ElapsedMilliseconds, updateCount);
+        _logger.LogDebug(
+            "⬅️ [Req:{RequestId}] 流式调用结束. 耗时: {Elapsed}ms. Chunks: {Count}. TraceId: {TraceId}. SpanId: {SpanId}. SessionId: {SessionId}",
+            requestId,
+            stopwatch.ElapsedMilliseconds,
+            updateCount,
+            logContext.TraceId,
+            logContext.SpanId,
+            logContext.SessionId);
     }
 
-    private void LogRequest(string requestId, string model, IEnumerable<ChatMessage> messages)
+    private void LogRequest(
+        string requestId,
+        string model,
+        IEnumerable<ChatMessage> messages,
+        (string TraceId, string SpanId, string SessionId) logContext)
     {
-        var userId = GetUserId();
-        _logger.LogDebug("➡️ [Req:{RequestId}] 用户: {UserId}, 模型: {Model}. PromptLength: {Length}", 
-            requestId, userId, model, messages.Sum(m => m.Text?.Length ?? 0));
+        _logger.LogDebug(
+            "➡️ [Req:{RequestId}] 模型: {Model}. PromptLength: {Length}. TraceId: {TraceId}. SpanId: {SpanId}. SessionId: {SessionId}",
+            requestId,
+            model,
+            messages.Sum(m => m.Text?.Length ?? 0),
+            logContext.TraceId,
+            logContext.SpanId,
+            logContext.SessionId);
 
         if (_enableSensitiveDataLogging)
         {
-            _logger.LogDebug("📝 [Req:{RequestId}] Messages: {Payload}", requestId, JsonSerializer.Serialize(messages));
+            _logger.LogDebug(
+                "📝 [Req:{RequestId}] Messages: {Payload}. TraceId: {TraceId}. SpanId: {SpanId}. SessionId: {SessionId}",
+                requestId,
+                JsonSerializer.Serialize(messages),
+                logContext.TraceId,
+                logContext.SpanId,
+                logContext.SessionId);
         }
     }
 
-    private void LogResponse(string requestId, long elapsed, ChatResponse response)
+    private void LogResponse(
+        string requestId,
+        long elapsed,
+        ChatResponse response,
+        (string TraceId, string SpanId, string SessionId) logContext)
     {
         int inputTokens = (int)(response.Usage?.InputTokenCount ?? 0);
         int outputTokens = (int)(response.Usage?.OutputTokenCount ?? 0);
 
-        _logger.LogDebug("⬅️ [Req:{RequestId}] 完成. 耗时: {Elapsed}ms. Tokens: {In}+{Out}={Total}. Finish: {Reason}",
+        _logger.LogDebug(
+            "⬅️ [Req:{RequestId}] 完成. 耗时: {Elapsed}ms. Tokens: {In}+{Out}={Total}. Finish: {Reason}. TraceId: {TraceId}. SpanId: {SpanId}. SessionId: {SessionId}",
             requestId, 
             elapsed,
             inputTokens, 
             outputTokens, 
             inputTokens + outputTokens,
-            response.FinishReason);
+            response.FinishReason,
+            logContext.TraceId,
+            logContext.SpanId,
+            logContext.SessionId);
 
         if (_enableSensitiveDataLogging)
         {
             var content = response.Messages.LastOrDefault()?.Text;
-            _logger.LogDebug("📄 [Req:{RequestId}] Response: {Content}...", requestId, content?.Substring(0, Math.Min(100, content?.Length ?? 0)));
+            _logger.LogDebug(
+                "📄 [Req:{RequestId}] Response: {Content}... TraceId: {TraceId}. SpanId: {SpanId}. SessionId: {SessionId}",
+                requestId,
+                content?.Substring(0, Math.Min(100, content?.Length ?? 0)),
+                logContext.TraceId,
+                logContext.SpanId,
+                logContext.SessionId);
         }
     }
 
-    private string GetUserId()
+    private static (string TraceId, string SpanId, string SessionId) CreateLogContext(ChatOptions? options)
     {
-        var context = _httpContextAccessor.HttpContext;
-        return context?.User?.Identity?.Name 
-               ?? context?.Request.Headers["X-User-Id"].ToString() 
-               ?? "anonymous";
-    }
-}
+        var traceId = Activity.Current?.TraceId.ToString() ?? Guid.NewGuid().ToString("N");
+        var spanId = Activity.Current?.SpanId.ToString() ?? "none";
+        var sessionId = GetOptionString(options, "SessionId") ?? "none";
 
+        return (traceId, spanId, sessionId);
+    }
+
+    private static string? GetOptionString(ChatOptions? options, string key)
+    {
+        if (options?.AdditionalProperties == null)
+        {
+            return null;
+        }
+
+        return options.AdditionalProperties.TryGetValue(key, out var value)
+            ? value?.ToString()
+            : null;
+    }
+
+}

@@ -1,12 +1,13 @@
 using Admin.NET.Ai.Abstractions;
 using Admin.NET.Ai.Models.Workflow;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using SqlSugar;
 
 namespace Admin.NET.Ai.Services.Workflow;
 
 //  这会感觉可能还是有问题的。详见我的这个demo看看 https://github.com/NOBB2333/NatashaHotReloadDemo  
-public class NatashaScriptEngine(IServiceProvider serviceProvider)
+public class NatashaScriptEngine(IServiceProvider serviceProvider, ILogger<NatashaScriptEngine> logger)
 {
     private INatashaDynamicLoadContextBase? _currentDomain;
     private System.WeakReference? _weakDomain;
@@ -20,11 +21,11 @@ public class NatashaScriptEngine(IServiceProvider serviceProvider)
             try
             {
                 executor.OnUnloadingAsync().GetAwaiter().GetResult();
-                Console.WriteLine($"[Natasha引擎] ✅ {executor.GetMetadata().Name} OnUnloadingAsync 完成");
+                logger.LogInformation("[Natasha引擎] {ScriptName} OnUnloadingAsync 完成", executor.GetMetadata().Name);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[Natasha引擎] ⚠️ {executor.GetMetadata().Name} OnUnloadingAsync 失败: {ex.Message}");
+                logger.LogWarning(ex, "[Natasha引擎] {ScriptName} OnUnloadingAsync 失败", executor.GetMetadata().Name);
             }
         }
         _loadedExecutors.Clear();
@@ -44,11 +45,11 @@ public class NatashaScriptEngine(IServiceProvider serviceProvider)
 
             if (_weakDomain.IsAlive)
             {
-                Console.WriteLine("[Natasha引擎] ⚠️ 警告: 旧域尚未完全释放，请确保没有外部引用指向脚本实例。");
+                logger.LogWarning("[Natasha引擎] 旧域尚未完全释放，请确保没有外部引用指向脚本实例");
             }
             else
             {
-                Console.WriteLine("[Natasha引擎] ✅ 旧域已成功卸载。");
+                logger.LogInformation("[Natasha引擎] 旧域已成功卸载");
             }
         }
     }
@@ -121,28 +122,26 @@ public class NatashaScriptEngine(IServiceProvider serviceProvider)
                 try
                 {
                     // 使用 ActivatorUtilities 支持构造函数注入
-                    Console.WriteLine($"[Natasha引擎] 正在使用依赖注入实例化 {type.Name} ...");
+                    logger.LogInformation("[Natasha引擎] 正在使用依赖注入实例化 {TypeName}", type.Name);
                     var executor = (IScriptExecutor)ActivatorUtilities.CreateInstance(serviceProvider, type);
                     executors.Add(executor);
                     
                     var meta = executor.GetMetadata();
-                    Console.WriteLine($"[系统] 已加载脚本: {meta.Name} v{meta.Version}");
+                    logger.LogInformation("[系统] 已加载脚本: {ScriptName} v{Version}", meta.Name, meta.Version);
                     
                     // 显示超时配置
                     if (meta.MaxExecutionTime.HasValue)
                     {
-                        Console.WriteLine($"       ⏱️ 最大执行时间: {meta.MaxExecutionTime.Value.TotalSeconds}s");
+                        logger.LogInformation("[系统] 脚本最大执行时间: {TimeoutSeconds}s", meta.MaxExecutionTime.Value.TotalSeconds);
                     }
                     if (meta.Tags?.Length > 0)
                     {
-                        Console.WriteLine($"       🏷️ 标签: [{string.Join(", ", meta.Tags)}]");
+                        logger.LogInformation("[系统] 脚本标签: {Tags}", string.Join(", ", meta.Tags));
                     }
-                    
-                    Console.WriteLine();
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[错误] 实例化脚本 {type.Name} 失败: {ex.Message}");
+                    logger.LogError(ex, "[错误] 实例化脚本 {TypeName} 失败", type.Name);
                 }
             }
             #endregion
@@ -153,11 +152,11 @@ public class NatashaScriptEngine(IServiceProvider serviceProvider)
                 try
                 {
                     executor.OnLoadedAsync(serviceProvider).GetAwaiter().GetResult();
-                    Console.WriteLine($"[Natasha引擎] ✅ {executor.GetMetadata().Name} OnLoadedAsync 完成");
+                    logger.LogInformation("[Natasha引擎] {ScriptName} OnLoadedAsync 完成", executor.GetMetadata().Name);
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[Natasha引擎] ⚠️ {executor.GetMetadata().Name} OnLoadedAsync 失败: {ex.Message}");
+                    logger.LogWarning(ex, "[Natasha引擎] {ScriptName} OnLoadedAsync 失败", executor.GetMetadata().Name);
                 }
             }
             
@@ -169,7 +168,7 @@ public class NatashaScriptEngine(IServiceProvider serviceProvider)
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[错误] 编译/加载 失败: {ex.Message}");
+            logger.LogError(ex, "[错误] 编译/加载失败");
             throw;
         }
     }

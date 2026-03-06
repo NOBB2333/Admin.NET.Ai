@@ -6,14 +6,14 @@ namespace Admin.NET.Ai.Abstractions;
 public interface IToolPermissionManager
 {
     /// <summary>
-    /// 检查用户是否有权限执行工具
+    /// 检查工具是否命中外部策略规则
     /// </summary>
-    Task<ToolPermissionResult> CheckPermissionAsync(string userId, string toolName, IDictionary<string, object?>? arguments = null);
+    Task<ToolPermissionResult> CheckPermissionAsync(string toolName, IDictionary<string, object?>? arguments = null);
     
     /// <summary>
-    /// 获取用户可用的工具列表
+    /// 获取可用的工具规则列表
     /// </summary>
-    Task<IEnumerable<string>> GetAllowedToolsAsync(string userId);
+    Task<IEnumerable<string>> GetAllowedToolsAsync();
     
     /// <summary>
     /// 注册工具权限规则
@@ -50,7 +50,7 @@ public enum PermissionLevel
     Sensitive,
     
     /// <summary>
-    /// 危险操作 (需要管理员审批)
+    /// 危险操作 (需要强制审批)
     /// </summary>
     Dangerous,
     

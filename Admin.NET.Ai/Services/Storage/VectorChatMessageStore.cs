@@ -1,10 +1,11 @@
 using Admin.NET.Ai.Abstractions;
 using Admin.NET.Ai.Services.Rag;
 using Admin.NET.Ai.Services.RAG;
+using Admin.NET.Ai.Storage;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
 using System.Security.Cryptography;
 using System.Text;
-using Admin.NET.Ai.Storage;
 
 namespace Admin.NET.Ai.Services.Storage;
 
@@ -14,20 +15,31 @@ namespace Admin.NET.Ai.Services.Storage;
 public class VectorChatMessageStore : ChatMessageStoreBase
 {
     private readonly ITextSearchProvider _searchProvider;
+    private readonly FileChatMessageStore _fallbackStore;
+    private readonly ILogger<VectorChatMessageStore> _logger;
+    private int _clearWarningState;
 
-    public VectorChatMessageStore(ITextSearchProvider searchProvider)
+    public VectorChatMessageStore(
+        ITextSearchProvider searchProvider,
+        FileChatMessageStore fallbackStore,
+        ILogger<VectorChatMessageStore> logger)
     {
         _searchProvider = searchProvider;
+        _fallbackStore = fallbackStore;
+        _logger = logger;
     }
 
-    public override async Task<IList<ChatMessage>> GetHistoryAsync(string sessionId, CancellationToken cancellationToken = default)
+    public override Task<IList<ChatMessage>> GetHistoryAsync(string sessionId, CancellationToken cancellationToken = default)
     {
-        // Vector Store 通常不适合作为全量历史记录的 Source of Truth
-        return await Task.FromResult<IList<ChatMessage>>(new List<ChatMessage>());
+        // 向量库用于语义检索，历史消息使用文件存储兜底，避免“查不到历史”。
+        return _fallbackStore.GetHistoryAsync(sessionId, cancellationToken);
     }
 
     public override async Task SaveMessageAsync(string sessionId, ChatMessage message, CancellationToken cancellationToken = default)
     {
+        // 先写兜底存储，保证历史可恢复。
+        await _fallbackStore.SaveMessageAsync(sessionId, message, cancellationToken);
+
         var docId = GenerateId(sessionId, message);
         
         var doc = new Document
@@ -42,13 +54,34 @@ public class VectorChatMessageStore : ChatMessageStoreBase
             }
         };
 
-        await _searchProvider.ChunkAndIndexAsync(new[] { doc });
+        try
+        {
+            await _searchProvider.ChunkAndIndexAsync([doc]);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Vector 索引写入失败，已保留消息到兜底存储: {SessionId}", sessionId);
+        }
     }
 
     public override async Task ClearHistoryAsync(string sessionId, CancellationToken cancellationToken = default)
     {
-        // VectorSearchProvider 需要扩展 DeleteByFilter
-        await Task.CompletedTask;
+        await _fallbackStore.ClearHistoryAsync(sessionId, cancellationToken);
+
+        if (Interlocked.Exchange(ref _clearWarningState, 1) == 0)
+        {
+            _logger.LogWarning("VectorChatMessageStore 尚未实现按 Session 清理向量索引，仅清理了兜底历史。");
+        }
+    }
+
+    public override Task SaveMessagesAsync(string sessionId, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken = default)
+    {
+        return base.SaveMessagesAsync(sessionId, messages, cancellationToken);
+    }
+
+    public override Task ReplaceHistoryAsync(string sessionId, IEnumerable<ChatMessage> messages, CancellationToken cancellationToken = default)
+    {
+        return _fallbackStore.ReplaceHistoryAsync(sessionId, messages, cancellationToken);
     }
 
     /// <summary>

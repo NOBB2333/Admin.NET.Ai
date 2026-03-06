@@ -11,6 +11,8 @@ using Azure.AI.OpenAI;
 using System.ClientModel;
 using Microsoft.SemanticKernel;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
+using Admin.NET.Ai.Middleware.ChatClients;
 
 namespace Admin.NET.Ai.Core;
 using MEAI = Microsoft.Extensions.AI;
@@ -146,28 +148,42 @@ public class AiFactory : IAiFactory
             builder.Use(inner => ActivatorUtilities.CreateInstance<Admin.NET.Ai.Middleware.AuditMiddleware>(_serviceProvider, inner));
         }
         
-        // [5] RAG 追踪 (TODO: 转换为 DelegatingChatClient)
-        // 注意：RAGTracingMiddleware 实现 IRunMiddleware，需要重构才能用于 ChatClientBuilder
-        // if (pipeline.EnableRAGTracing)
-        // {
-        //     builder.Use(inner => ActivatorUtilities.CreateInstance<Admin.NET.Ai.Middleware.RAGTracingMiddleware>(_serviceProvider, inner));
-        // }
+        // [5] RAG 追踪
+        if (pipeline.EnableRAGTracing)
+        {
+            builder.Use(inner => new RunMiddlewareChatClient(
+                inner,
+                ActivatorUtilities.CreateInstance<Admin.NET.Ai.Middleware.RAGTracingMiddleware>(_serviceProvider),
+                _serviceProvider));
+        }
         
         // ========== 第三层：业务处理 ==========
         
-        // [6] 边界检查 (TODO: 转换为 DelegatingChatClient)
-        // 注意：BoundaryCheckMiddleware 实现 IRunMiddleware，需要重构
-        // if (pipeline.EnableBoundaryCheck)
-        // {
-        //     builder.Use(inner => ActivatorUtilities.CreateInstance<Admin.NET.Ai.Middleware.BoundaryCheckMiddleware>(_serviceProvider, inner));
-        // }
+        // [6] 边界检查
+        if (pipeline.EnableBoundaryCheck)
+        {
+            builder.Use(inner => new RunMiddlewareChatClient(
+                inner,
+                ActivatorUtilities.CreateInstance<Admin.NET.Ai.Middleware.BoundaryCheckMiddleware>(_serviceProvider),
+                _serviceProvider));
+        }
         
-        // [7] 指令注入 (TODO: 转换为 DelegatingChatClient)
-        // 注意：InstructionMiddleware 实现 IRunMiddleware，需要重构
-        // if (pipeline.EnableInstruction)
-        // {
-        //     builder.Use(inner => ActivatorUtilities.CreateInstance<Admin.NET.Ai.Middleware.InstructionMiddleware>(_serviceProvider, inner));
-        // }
+        // [7] 指令注入
+        if (pipeline.EnableInstruction)
+        {
+            var instructions = ResolveInstructionText(config);
+            if (!string.IsNullOrWhiteSpace(instructions))
+            {
+                builder.Use(inner => new RunMiddlewareChatClient(
+                    inner,
+                    new Admin.NET.Ai.Middleware.InstructionMiddleware(instructions),
+                    _serviceProvider));
+            }
+            else
+            {
+                _logger.LogWarning("EnableInstruction=true but no instruction text found in ProviderOptions for client '{ClientName}'", name);
+            }
+        }
         
         // [8] 缓存 (如果在缓存中找到，则短路后续调用)
         if (pipeline.EnableCaching)
@@ -200,19 +216,11 @@ public class AiFactory : IAiFactory
         
         // ========== 第六层：工具处理 ==========
         
-        // [11] 工具验证 (TODO: 转换为 DelegatingChatClient)
-        // 注意：ToolValidationMiddleware 实现 IRunMiddleware，需要重构
-        // if (pipeline.EnableToolValidation)
-        // {
-        //     builder.Use(inner => ActivatorUtilities.CreateInstance<Admin.NET.Ai.Middleware.ToolValidationMiddleware>(_serviceProvider, inner));
-        // }
-        
-        // [12] 工具监控 (TODO: 转换为 DelegatingChatClient)
-        // 注意：ToolMonitoringMiddleware 实现 IRunMiddleware，需要重构
-        // if (pipeline.EnableToolMonitoring)
-        // {
-        //     builder.Use(inner => ActivatorUtilities.CreateInstance<Admin.NET.Ai.Middleware.ToolMonitoringMiddleware>(_serviceProvider, inner));
-        // }
+        // [11,12] 工具验证/监控（通过 ToolMiddlewareChatClient 包装）
+        if (pipeline.EnableToolValidation || pipeline.EnableToolMonitoring)
+        {
+            builder.Use(inner => BuildToolMiddlewareClient(inner, pipeline));
+        }
         
         // [13] Tool Reduction (工具精简 - 需要 Embedding 服务)
         // if (pipeline.EnableToolReduction)
@@ -281,7 +289,8 @@ public class AiFactory : IAiFactory
             config.ModelId);
         
         // 1. 获取官方 IChatClient (MEAI 标准实现)
-        var innerClient = new OpenAIChatClientAdapter(client.GetChatClient(config.ModelId), config.ModelId);
+        var innerClient = ActivatorUtilities.CreateInstance<OpenAIChatClientAdapter>(
+            _serviceProvider, client.GetChatClient(config.ModelId), config.ModelId);
 
         // 2. 挂载图片下载中间件 (替代 OpenAIChatClientAdapter 的功能)
         // 自动下载 HTTP 图片并转换为 DataContent，支持内网/代理场景
@@ -406,7 +415,7 @@ public class AiFactory : IAiFactory
                   }
               catch (Exception ex)
               {
-                  Console.WriteLine($"Error creating agent '{agentName}' with client '{clientName}': {ex.Message}");
+                  _logger.LogError(ex, "Error creating agent '{AgentName}' with client '{ClientName}'", agentName, clientName);
               }
           }
           
@@ -473,6 +482,58 @@ public class AiFactory : IAiFactory
     }
 
     #endregion
+
+    private IChatClient BuildToolMiddlewareClient(IChatClient innerClient, PipelineConfig pipeline)
+    {
+        var toolMiddlewares = new List<IToolCallingMiddleware>();
+
+        // 监控放在外层，便于记录验证拒绝和执行结果
+        if (pipeline.EnableToolMonitoring)
+        {
+            toolMiddlewares.Add(ActivatorUtilities.CreateInstance<Admin.NET.Ai.Middleware.ToolMonitoringMiddleware>(_serviceProvider));
+        }
+
+        if (pipeline.EnableToolValidation)
+        {
+            toolMiddlewares.Add(ActivatorUtilities.CreateInstance<Admin.NET.Ai.Middleware.ToolValidationMiddleware>(_serviceProvider));
+        }
+
+        return toolMiddlewares.Count == 0
+            ? innerClient
+            : new ToolMiddlewareChatClient(innerClient, toolMiddlewares, _serviceProvider);
+    }
+
+    private static string? ResolveInstructionText(LLMClientConfig config)
+    {
+        if (config.ProviderOptions == null || config.ProviderOptions.Count == 0)
+        {
+            return null;
+        }
+
+        foreach (var key in new[] { "instructions", "instruction", "systemPrompt", "system_prompt" })
+        {
+            if (!config.ProviderOptions.TryGetValue(key, out var value) || value == null)
+            {
+                continue;
+            }
+
+            if (value is string str && !string.IsNullOrWhiteSpace(str))
+            {
+                return str;
+            }
+
+            if (value is JsonElement element && element.ValueKind == JsonValueKind.String)
+            {
+                var text = element.GetString();
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    return text;
+                }
+            }
+        }
+
+        return null;
+    }
 
     #region 客户端发现与管理
 

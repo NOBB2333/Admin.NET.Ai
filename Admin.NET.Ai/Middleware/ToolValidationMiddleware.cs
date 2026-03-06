@@ -25,6 +25,20 @@ public class ToolValidationMiddleware : IToolCallingMiddleware
     /// </summary>
     public Func<string, string, Task<bool>>? ApprovalCallback { get; set; }
 
+    /// <summary>
+    /// 审批回调（结构化）：
+    /// 提供完整审批上下文，便于接入企业审批系统（工单、OA、IM Bot）。
+    /// 若已设置该回调，将优先于 ApprovalCallback。
+    /// </summary>
+    public Func<ToolApprovalRequest, Task<bool>>? ApprovalRequestCallback { get; set; }
+
+    /// <summary>
+    /// 模型风险判定回调（可选）：
+    /// 输入工具名和参数 JSON，输出风险级别与原因。
+    /// 可由业务方接入任意模型或策略引擎实现。
+    /// </summary>
+    public Func<string, string, Task<ToolRiskDecision>>? RiskDecisionCallback { get; set; }
+
     public ToolValidationMiddleware(
         ILogger<ToolValidationMiddleware> logger,
         IToolPermissionManager? permissionManager = null,
@@ -41,30 +55,94 @@ public class ToolValidationMiddleware : IToolCallingMiddleware
 
     public async Task<ToolResponse> InvokeAsync(ToolCallingContext context, NextToolCallingMiddleware next)
     {
+        var validationId = Guid.NewGuid().ToString("N")[..8];
         var toolName = context.ToolCall.Name;
         var arguments = context.ToolCall.Arguments;
+        var permissionLevel = PermissionLevel.Normal;
 
-        _logger.LogInformation("🔍 [Validation] 验证工具调用: {Tool}", toolName);
+        _logger.LogInformation("🔍 [Validation:{ValidationId}] 验证工具调用: {Tool}", validationId, toolName);
 
         // 1. 规则权限检查 (ToolPermissionManager — 基于角色/频率/级别)
         if (_permissionManager != null && _options.EnablePermissionCheck)
         {
-            var userId = GetUserId(context);
-            var permResult = await _permissionManager.CheckPermissionAsync(userId, toolName, arguments);
+            var permResult = await _permissionManager.CheckPermissionAsync(toolName, arguments);
             
             if (!permResult.IsAllowed)
             {
-                _logger.LogWarning("🚫 [Validation] 权限拒绝: {Tool}, Reason={Reason}", toolName, permResult.DeniedReason);
+                _logger.LogWarning("🚫 [Validation:{ValidationId}] 权限拒绝: {Tool}, Reason={Reason}",
+                    validationId, toolName, permResult.DeniedReason);
                 return new ToolResponse 
                 { 
-                    Result = $"[Permission Denied] {permResult.DeniedReason}" 
+                    Result = $"[Permission Denied][{validationId}] {permResult.DeniedReason}" 
                 };
             }
+
+            permissionLevel = permResult.Level;
 
             // 敏感操作警告
             if (permResult.Level >= PermissionLevel.Sensitive)
             {
-                _logger.LogWarning("⚠️ [Validation] 敏感操作: {Tool}, Level={Level}", toolName, permResult.Level);
+                _logger.LogWarning("⚠️ [Validation:{ValidationId}] 敏感操作: {Tool}, Level={Level}",
+                    validationId, toolName, permResult.Level);
+            }
+        }
+
+        // 1.1 模型风险判定（可选）
+        if (_options.EnableModelRiskAssessment && RiskDecisionCallback != null)
+        {
+            var argsJson = arguments != null ? JsonSerializer.Serialize(arguments) : "{}";
+            try
+            {
+                var riskTask = RiskDecisionCallback(toolName, argsJson);
+                var riskDecision = _options.RiskAssessmentTimeoutMs > 0
+                    ? await riskTask.WaitAsync(TimeSpan.FromMilliseconds(_options.RiskAssessmentTimeoutMs))
+                    : await riskTask;
+
+                if (riskDecision.Level > permissionLevel)
+                {
+                    permissionLevel = riskDecision.Level;
+                }
+
+                if (riskDecision.Level >= PermissionLevel.Sensitive)
+                {
+                    _logger.LogWarning("⚠️ [Validation:{ValidationId}] 模型判定高风险: {Tool}, Level={Level}, Reason={Reason}",
+                        validationId, toolName, riskDecision.Level, riskDecision.Reason);
+                }
+            }
+            catch (TimeoutException ex)
+            {
+                _logger.LogWarning(ex, "⏱️ [Validation:{ValidationId}] 模型风险判定超时: {Tool}, TimeoutMs={TimeoutMs}",
+                    validationId, toolName, _options.RiskAssessmentTimeoutMs);
+
+                if (_options.DenyOnRiskAssessmentError)
+                {
+                    return new ToolResponse
+                    {
+                        Result = $"[Risk Assessment Timeout][{validationId}] 工具 '{toolName}' 风险判定超时，已按策略拒绝"
+                    };
+                }
+
+                if (_options.RiskAssessmentFailureFallbackLevel > permissionLevel)
+                {
+                    permissionLevel = _options.RiskAssessmentFailureFallbackLevel;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "❌ [Validation:{ValidationId}] 模型风险判定失败: {Tool}",
+                    validationId, toolName);
+                if (_options.DenyOnRiskAssessmentError)
+                {
+                    return new ToolResponse
+                    {
+                        Result = $"[Risk Assessment Error][{validationId}] 工具 '{toolName}' 风险判定失败，已按策略拒绝"
+                    };
+                }
+
+                if (_options.RiskAssessmentFailureFallbackLevel > permissionLevel)
+                {
+                    permissionLevel = _options.RiskAssessmentFailureFallbackLevel;
+                }
             }
         }
 
@@ -75,27 +153,57 @@ public class ToolValidationMiddleware : IToolCallingMiddleware
                 .FirstOrDefault(t => t.Name == toolName || 
                     t.GetFunctions().Any(f => f.Name == toolName));
 
-            if (toolMeta != null && toolMeta.RequiresApproval(arguments))
-            {
-                _logger.LogWarning("⚠️ [Validation] 工具请求审批: {Tool}", toolName);
+            var requiresToolSelfApproval = toolMeta?.RequiresApproval(arguments) ?? false;
+            var requiresRiskApproval = _options.EnableRiskBasedApproval
+                && permissionLevel >= _options.MinLevelForMandatoryApproval;
 
-                if (ApprovalCallback != null)
+            if (requiresToolSelfApproval || requiresRiskApproval)
+            {
+                _logger.LogWarning("⚠️ [Validation:{ValidationId}] 工具请求审批: {Tool}, RiskLevel={RiskLevel}, ToolSelfApproval={ToolSelfApproval}",
+                    validationId, toolName, permissionLevel, requiresToolSelfApproval);
+
+                var argsJson = arguments != null ? JsonSerializer.Serialize(arguments) : "{}";
+                var approvalRequest = new ToolApprovalRequest
                 {
-                    var argsJson = arguments != null ? JsonSerializer.Serialize(arguments) : "{}";
-                    var approved = await ApprovalCallback(toolName, argsJson);
+                    ValidationId = validationId,
+                    ToolName = toolName,
+                    Arguments = arguments,
+                    ArgumentsJson = argsJson,
+                    RiskLevel = permissionLevel,
+                    RequiresToolSelfApproval = requiresToolSelfApproval,
+                    RequiresRiskBasedApproval = requiresRiskApproval
+                };
+
+                if (ApprovalRequestCallback != null || ApprovalCallback != null)
+                {
+                    var approved = ApprovalRequestCallback != null
+                        ? await ApprovalRequestCallback(approvalRequest)
+                        : await ApprovalCallback!(toolName, argsJson);
+
                     if (!approved)
                     {
-                        _logger.LogWarning("🚫 [Validation] 用户拒绝审批: {Tool}", toolName);
+                        _logger.LogWarning("🚫 [Validation:{ValidationId}] 用户拒绝审批: {Tool}", validationId, toolName);
                         return new ToolResponse
                         {
-                            Result = $"[Approval Denied] 用户拒绝了工具 '{toolName}' 的调用"
+                            Result = $"[Approval Denied][{validationId}] 用户拒绝了工具 '{toolName}' 的调用"
                         };
                     }
-                    _logger.LogInformation("✅ [Validation] 用户批准: {Tool}", toolName);
+                    _logger.LogInformation("✅ [Validation:{ValidationId}] 用户批准: {Tool}", validationId, toolName);
                 }
                 else
                 {
-                    _logger.LogWarning("⚠️ [Validation] 工具需要审批但未配置 ApprovalCallback，默认放行: {Tool}", toolName);
+                    if (_options.DenyWhenApprovalCallbackMissing)
+                    {
+                        _logger.LogWarning("🚫 [Validation:{ValidationId}] 工具需要审批但未配置审批回调，默认拒绝: {Tool}",
+                            validationId, toolName);
+                        return new ToolResponse
+                        {
+                            Result = $"[Approval Denied][{validationId}] 工具 '{toolName}' 需要审批，但系统未配置审批回调"
+                        };
+                    }
+
+                    _logger.LogWarning("⚠️ [Validation:{ValidationId}] 工具需要审批但未配置审批回调，按配置放行: {Tool}",
+                        validationId, toolName);
                 }
             }
         }
@@ -106,14 +214,14 @@ public class ToolValidationMiddleware : IToolCallingMiddleware
             var validationErrors = ValidateArguments(toolName, arguments);
             if (validationErrors.Any())
             {
-                _logger.LogWarning("⚠️ [Validation] 参数验证失败: {Tool}, Errors={Errors}", 
-                    toolName, string.Join("; ", validationErrors));
+                _logger.LogWarning("⚠️ [Validation:{ValidationId}] 参数验证失败: {Tool}, Errors={Errors}", 
+                    validationId, toolName, string.Join("; ", validationErrors));
                 
                 if (_options.RejectInvalidArguments)
                 {
                     return new ToolResponse 
                     { 
-                        Result = $"[Validation Error] {string.Join("; ", validationErrors)}" 
+                        Result = $"[Validation Error][{validationId}] {string.Join("; ", validationErrors)}" 
                     };
                 }
             }
@@ -141,7 +249,7 @@ public class ToolValidationMiddleware : IToolCallingMiddleware
             {
                 return new ToolResponse 
                 { 
-                    Result = $"[Execution Error] {sandboxResult.Error}" 
+                    Result = $"[Execution Error][{validationId}] {sandboxResult.Error}" 
                 };
             }
 
@@ -165,28 +273,12 @@ public class ToolValidationMiddleware : IToolCallingMiddleware
             if (resultStr.Length > _options.MaxResultSize)
             {
                 response.Result = resultStr.Substring(0, _options.MaxResultSize) + "... [Truncated]";
-                _logger.LogDebug("✂️ [Validation] 结果已截断: {Tool}", toolName);
+                _logger.LogDebug("✂️ [Validation:{ValidationId}] 结果已截断: {Tool}", validationId, toolName);
             }
         }
 
-        _logger.LogInformation("✅ [Validation] 验证完成: {Tool}", toolName);
+        _logger.LogInformation("✅ [Validation:{ValidationId}] 验证完成: {Tool}", validationId, toolName);
         return response;
-    }
-
-    private string GetUserId(ToolCallingContext context)
-    {
-        if (context.ServiceProvider != null)
-        {
-            var httpContextAccessor = context.ServiceProvider.GetService(
-                typeof(Microsoft.AspNetCore.Http.IHttpContextAccessor)) 
-                as Microsoft.AspNetCore.Http.IHttpContextAccessor;
-            
-            var httpContext = httpContextAccessor?.HttpContext;
-            return httpContext?.User?.Identity?.Name 
-                ?? httpContext?.Request.Headers["X-User-Id"].ToString() 
-                ?? "anonymous";
-        }
-        return "anonymous";
     }
 
     private List<string> ValidateArguments(string toolName, IDictionary<string, object?> arguments)
@@ -251,10 +343,40 @@ public class ToolValidationOptions
     /// 启用工具自管理审批 (IAiCallableFunction.RequiresApproval)
     /// </summary>
     public bool EnableSelfManagedApproval { get; set; } = true;
+    public bool EnableModelRiskAssessment { get; set; } = true;
+    public bool DenyOnRiskAssessmentError { get; set; } = true;
+    public int RiskAssessmentTimeoutMs { get; set; } = 8000;
+    public PermissionLevel RiskAssessmentFailureFallbackLevel { get; set; } = PermissionLevel.Sensitive;
+    public bool EnableRiskBasedApproval { get; set; } = true;
+    public PermissionLevel MinLevelForMandatoryApproval { get; set; } = PermissionLevel.Sensitive;
+    public bool DenyWhenApprovalCallbackMissing { get; set; } = true;
     public bool ValidateArguments { get; set; } = true;
     public bool RejectInvalidArguments { get; set; } = false;
     public bool UseSandbox { get; set; } = true;
     public bool SanitizeResult { get; set; } = true;
     public int TimeoutMs { get; set; } = 30000;
     public int MaxResultSize { get; set; } = 5000;
+}
+
+/// <summary>
+/// 工具风险判定结果
+/// </summary>
+public sealed class ToolRiskDecision
+{
+    public PermissionLevel Level { get; set; } = PermissionLevel.Normal;
+    public string? Reason { get; set; }
+}
+
+/// <summary>
+/// 结构化审批请求
+/// </summary>
+public sealed class ToolApprovalRequest
+{
+    public string ValidationId { get; set; } = string.Empty;
+    public string ToolName { get; set; } = string.Empty;
+    public IDictionary<string, object?>? Arguments { get; set; }
+    public string ArgumentsJson { get; set; } = "{}";
+    public PermissionLevel RiskLevel { get; set; } = PermissionLevel.Normal;
+    public bool RequiresToolSelfApproval { get; set; }
+    public bool RequiresRiskBasedApproval { get; set; }
 }

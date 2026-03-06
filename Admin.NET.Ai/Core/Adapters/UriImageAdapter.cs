@@ -1,4 +1,5 @@
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
 
 namespace Admin.NET.Ai.Core.Adapters;
@@ -12,10 +13,15 @@ namespace Admin.NET.Ai.Core.Adapters;
 public class UriImageAdapter : DelegatingChatClient
 {
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ILogger<UriImageAdapter> _logger;
 
-    public UriImageAdapter(IChatClient innerClient, IHttpClientFactory httpClientFactory) : base(innerClient)
+    public UriImageAdapter(
+        IChatClient innerClient,
+        IHttpClientFactory httpClientFactory,
+        ILogger<UriImageAdapter> logger) : base(innerClient)
     {
         _httpClientFactory = httpClientFactory;
+        _logger = logger;
     }
 
     public override async Task<ChatResponse> GetResponseAsync(
@@ -75,7 +81,7 @@ public class UriImageAdapter : DelegatingChatClient
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"[UriImageAdapter] Create DataContent Failed: {ex.Message}. Keeping original URI.");
+                        _logger.LogWarning(ex, "UriImageAdapter convert image URI failed, keep original URI");
                         newContents.Add(uriContent);
                     }
                 }

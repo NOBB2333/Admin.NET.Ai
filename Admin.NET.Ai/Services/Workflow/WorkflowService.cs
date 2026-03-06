@@ -5,6 +5,7 @@ using Microsoft.Agents.AI.Workflows.Execution;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 using System.Text.Json;
 using MafWorkflow = Microsoft.Agents.AI.Workflows.Workflow;
 
@@ -69,9 +70,20 @@ public class WorkflowService : IWorkflowService
 
         _logger.LogInformation("创建并发工作流: {Name}, Workers: {Count}", name, workers.Length);
 
-        // 简化实现：将所有 workers 串联，最后接 aggregator
-        var allAgents = workers.Append(aggregator).ToArray();
-        return CreateSequential(name, allAgents);
+        // Fan-out/Fan-in:
+        // Relay -> workers(parallel) -> aggregator
+        var relay = new WorkflowInputRelayExecutor($"relay_{name}");
+        var builder = new WorkflowBuilder(relay).WithName(name);
+
+        foreach (var worker in workers)
+        {
+            builder.AddEdge(relay, worker);
+            builder.AddEdge(worker, aggregator);
+        }
+
+        return builder
+            .WithOutputFrom(aggregator)
+            .Build();
     }
 
     #endregion
@@ -83,6 +95,10 @@ public class WorkflowService : IWorkflowService
     /// </summary>
     public async IAsyncEnumerable<WorkflowEvent> ExecuteAsync(MafWorkflow workflow, ChatMessage input)
     {
+        var userId = TryGetAdditionalProperty(input.AdditionalProperties, "UserId") ?? "anonymous";
+        var sessionId = TryGetAdditionalProperty(input.AdditionalProperties, "SessionId") ?? $"workflow:{workflow.Name}";
+        using var scope = BeginLogScope(userId, sessionId);
+
         _logger.LogInformation("执行工作流: {Name}", workflow.Name);
 
         await using var run = await InProcessExecution.RunStreamingAsync(workflow, input);
@@ -113,6 +129,7 @@ public class WorkflowService : IWorkflowService
     /// </summary>
     public async IAsyncEnumerable<WorkflowEvent> ExecuteAutonomousAsync(string requirement)
     {
+        using var scope = BeginLogScope("anonymous", "workflow:autonomous");
         _logger.LogInformation("生成自主工作流: {Requirement}", requirement);
 
         var aiFactory = _serviceProvider.GetRequiredService<IAiFactory>();
@@ -171,6 +188,7 @@ public class WorkflowService : IWorkflowService
     /// </summary>
     public async IAsyncEnumerable<WorkflowEvent> ResumeAsync(string workflowId, string humanInput)
     {
+        using var scope = BeginLogScope("anonymous", workflowId);
         _logger.LogInformation("恢复工作流: {Id}", workflowId);
 
         // 提交人工输入
@@ -196,6 +214,32 @@ public class WorkflowService : IWorkflowService
         return text;
     }
 
+    private IDisposable BeginLogScope(string userId, string sessionId)
+    {
+        var activity = Activity.Current;
+        var traceId = activity?.TraceId.ToString() ?? Guid.NewGuid().ToString("N");
+        var spanId = activity?.SpanId.ToString() ?? "none";
+        return _logger.BeginScope(new Dictionary<string, object?>
+        {
+            ["traceId"] = traceId,
+            ["spanId"] = spanId,
+            ["userId"] = userId,
+            ["sessionId"] = sessionId
+        });
+    }
+
+    private static string? TryGetAdditionalProperty(IDictionary<string, object?>? props, string key)
+    {
+        if (props == null)
+        {
+            return null;
+        }
+
+        return props.TryGetValue(key, out var value)
+            ? value?.ToString()
+            : null;
+    }
+
     #endregion
 }
 
@@ -211,6 +255,18 @@ internal class WorkflowStep
 {
     public string? Name { get; set; }
     public string? Instructions { get; set; }
+}
+
+internal sealed class WorkflowInputRelayExecutor(string executorId)
+    : Executor<ChatMessage, ChatMessage>(executorId)
+{
+    public override ValueTask<ChatMessage> HandleAsync(
+        ChatMessage input,
+        IWorkflowContext context,
+        CancellationToken cancellationToken = default)
+    {
+        return ValueTask.FromResult(input);
+    }
 }
 
 #endregion

@@ -31,37 +31,37 @@ public class McpHealthCheck : IHealthCheck
         var unhealthyServers = new List<string>();
         var healthyServers = new List<string>();
 
-        foreach (var server in _options.Value.Servers.Where(s => s.Enabled))
+        foreach (var (serverKey, server) in _options.Value.Servers.Where(s => s.Value.Enable))
         {
             try
             {
                 // 尝试获取客户端连接
-                var client = await _factory.GetClientAsync(server.Name);
+                var client = await _factory.GetClientAsync(serverKey);
                 
                 if (client?.ServerCapabilities != null)
                 {
-                    healthyServers.Add(server.Name);
-                    data[$"{server.Name}_status"] = "Connected";
-                    data[$"{server.Name}_tools"] = client.ServerCapabilities.Tools != null;
-                    data[$"{server.Name}_resources"] = client.ServerCapabilities.Resources != null;
+                    healthyServers.Add(serverKey);
+                    data[$"{serverKey}_status"] = "Connected";
+                    data[$"{serverKey}_tools"] = client.ServerCapabilities.Tools != null;
+                    data[$"{serverKey}_resources"] = client.ServerCapabilities.Resources != null;
                 }
                 else
                 {
-                    unhealthyServers.Add(server.Name);
-                    data[$"{server.Name}_status"] = "NoCapabilities";
+                    unhealthyServers.Add(serverKey);
+                    data[$"{serverKey}_status"] = "NoCapabilities";
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "MCP 健康检查失败: {Server}", server.Name);
-                unhealthyServers.Add(server.Name);
-                data[$"{server.Name}_status"] = "Failed";
-                data[$"{server.Name}_error"] = ex.Message;
+                _logger.LogWarning(ex, "MCP 健康检查失败: {Server}", serverKey);
+                unhealthyServers.Add(serverKey);
+                data[$"{serverKey}_status"] = "Failed";
+                data[$"{serverKey}_error"] = ex.Message;
             }
         }
 
         // 汇总状态
-        var total = _options.Value.Servers.Count(s => s.Enabled);
+        var total = _options.Value.Servers.Count(s => s.Value.Enable);
         data["total_servers"] = total;
         data["healthy_count"] = healthyServers.Count;
         data["unhealthy_count"] = unhealthyServers.Count;

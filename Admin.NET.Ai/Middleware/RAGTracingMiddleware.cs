@@ -2,6 +2,7 @@ using Admin.NET.Ai.Abstractions;
 using Admin.NET.Ai.Services.RAG;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 
 namespace Admin.NET.Ai.Middleware;
 
@@ -18,8 +19,17 @@ public class RAGTracingMiddleware : IRunMiddleware
     {
         var startTime = DateTime.Now;
         var query = context.Messages.LastOrDefault(m => m.Role == ChatRole.User)?.Text;
+        var sessionId = context.Options?.AdditionalProperties?.TryGetValue("SessionId", out var sid) == true
+            ? sid?.ToString() ?? "none"
+            : "none";
+        using var scope = _logger.BeginScope(new Dictionary<string, object?>
+        {
+            ["traceId"] = Activity.Current?.TraceId.ToString() ?? Guid.NewGuid().ToString("N"),
+            ["spanId"] = Activity.Current?.SpanId.ToString() ?? "none",
+            ["sessionId"] = sessionId
+        });
 
-        _logger.LogInformation($"[RAG_TRACE] Start Processing Query: {query}");
+         _logger.LogInformation($"[RAG_TRACE] Start Processing Query: {query}");
 
         // 执行管道 (包括 ContextInjection -> RAG Search)
         var response = await next(context);

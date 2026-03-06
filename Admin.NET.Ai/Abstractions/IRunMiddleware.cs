@@ -21,13 +21,6 @@ public class RunMiddlewareContext
     public string? TraceId { get; set; }
     public string? ActionName { get; set; }
 
-    public string? GetUserId() 
-    {
-        // 从 Options 或 ServiceProvider (HttpContext) 获取
-        // 这里简单模拟
-        return "user_generic";
-    }
-
     public string? GetClientIp() => "127.0.0.1";
 
     public string? GetActionName() => ActionName;

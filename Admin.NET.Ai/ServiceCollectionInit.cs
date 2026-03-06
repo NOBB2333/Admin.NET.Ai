@@ -120,6 +120,8 @@ public static class ServiceCollectionInit
         services.TryAddScoped<RateLimitingMiddleware>();
         services.TryAddScoped<TokenMonitoringMiddleware>();
         services.TryAddScoped<AuditMiddleware>();
+        services.TryAddScoped<RAGTracingMiddleware>();
+        services.TryAddScoped<BoundaryCheckMiddleware>();
         services.TryAddScoped<ToolMonitoringMiddleware>();
         services.TryAddScoped<ToolValidationMiddleware>();
 
